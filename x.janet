@@ -6,7 +6,6 @@
 (def *store-path* "/tmp/xstore")
 (def *hash-cache* @{})
 
-
 (defn save-env
   []
   {:cwd (os/cwd)
@@ -58,7 +57,5 @@
     (spit (path/join (dyn :pkgout) "hello.txt") "hello world!"))
 })
 
-
-@{:}
 
 (pp (build my-pkg))
