@@ -28,25 +28,34 @@
                 (path/join *store-path* hash)))
 
   (def pkg-info-path (path/join pkgout ".xpkg.jdn"))
-  # TODO flocking.
-  (when (os/stat pkgout)
-    (sh/$ ["rm" "-vrf" pkgout]))
-  (sh/$ ["mkdir" "-pv" pkgout])
-  (def env (save-env))
-  (defer (restore-env env)
-    (when (not (os/stat pkg-info-path))
-      (do
-        (os/cd pkgout)
-        (with-dyns [:pkgout pkgout]
-          ((pkg :builder))))))
+  (when (not (os/stat pkg-info-path))
+    # TODO flocking.
+    (when (os/stat pkgout)
+      (sh/$ ["rm" "-vrf" pkgout]))
+    (sh/$ ["mkdir" "-pv" pkgout])
+    (def env (save-env))
+    (defer (restore-env env)
+      # Wipe env so package builds
+      # don't accidentally rely on
+      # any state.
+      (eachk k (env :environ)
+        (os/setenv k nil))
+      (os/cd pkgout)
+      (with-dyns [:pkgout pkgout]
+        # TODO Work out how to privsep builder.
+        # Marshal builder to different process?
+        ((pkg :builder))))
+    
+    # TODO Freeze package on disk nix style
+    # TODO Scan for package dependencies references
+    # and write the gc roots.
+    # TODO write other hermes attributes in jdn format.
+    # Force roots, ignore roots etc.
+    (let [tmp-info (string pkg-info-path ".tmp")]
+      (spit tmp-info "Some bogus info...")
+      (os/rename tmp-info pkg-info-path)))
   
-  # TODO Scan for package dependencies references
-  # and write the gc roots.
-  # TODO write other hermes attributes in jdn format.
-  # Force roots, ignore roots etc.
-  (let [tmp-info (string pkg-info-path ".tmp")]
-    (spit tmp-info "Some bogus info...")
-    (os/rename tmp-info pkg-info-path))
+
   pkgout)
 
 
