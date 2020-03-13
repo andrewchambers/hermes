@@ -4,7 +4,6 @@
 (import sh)
 
 (def *store-path* "/tmp/xstore")
-(def *hash-cache* @{})
 
 (defn save-env
   []
@@ -24,7 +23,7 @@
   (assert (function? (pkg :builder)))
 
   (def pkgout (->> (pkg :builder)
-                (_x/hash *hash-cache* )
+                (_x/hash)
                 (base16/encode)
                 (path/join *store-path*)))
 
@@ -79,4 +78,5 @@
 (pp my-pkg1)
 (pp my-pkg2)
 
+(pp (_x/hash my-pkg2))
 (pp (_x/direct-dependencies my-pkg2))

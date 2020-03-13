@@ -1,26 +1,34 @@
 #include "sha1.h"
 #include <alloca.h>
+#include <assert.h>
 #include <janet.h>
 
 typedef struct {
   JanetFunction *builder;
+  JanetString hash;
 } Pkg;
 
-static int pkg_gc(void *p, size_t s) {
+static int pkg_gcmark(void *p, size_t s) {
   (void)s;
   Pkg *pkg = p;
-  janet_mark(janet_wrap_function(pkg->builder));
+  if (pkg->hash) {
+    janet_mark(janet_wrap_string(pkg->hash));
+  }
+  if (pkg->builder) {
+    janet_mark(janet_wrap_function(pkg->builder));
+  }
   return 0;
 }
 
-static const JanetAbstractType pkg_type = {"x/pkg", pkg_gc, NULL, NULL, NULL,
-                                           NULL,    NULL,   NULL, NULL, NULL};
+static const JanetAbstractType pkg_type = {
+    "x/pkg", NULL, pkg_gcmark, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 static Janet pkg(int argc, Janet *argv) {
   janet_fixarity(argc, 1);
   JanetFunction *func = janet_getfunction(argv, 0);
   Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
   pkg->builder = func;
+  pkg->hash = NULL;
   return janet_wrap_abstract(pkg);
 }
 
@@ -36,17 +44,18 @@ static HashContext *new_hash_context() {
   return ctx;
 }
 
-static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v);
+static Janet hash(int argc, Janet *argv);
+static JanetString hash2(Janet v);
+static void hash_add(HashContext *ctx, Janet v);
 
-static void hash_funcdef(HashContext *ctx, JanetTable *hash_cache,
-                         JanetFuncDef *def) {
+static void hash_funcdef(HashContext *ctx, JanetFuncDef *def) {
   int32_t i;
   for (i = 0; i < def->constants_length; i++) {
-    hash_add(ctx, hash_cache, def->constants[i]);
+    hash_add(ctx, def->constants[i]);
   }
 
   for (i = 0; i < def->defs_length; ++i) {
-    hash_funcdef(ctx, hash_cache, def->defs[i]);
+    hash_funcdef(ctx, def->defs[i]);
   }
 
   sha1_update(&ctx->hash_ctx, (char *)&def->flags, sizeof(def->flags));
@@ -59,7 +68,7 @@ static void hash_funcdef(HashContext *ctx, JanetTable *hash_cache,
   }
 }
 
-static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
+static void hash_add(HashContext *ctx, Janet v) {
   switch (janet_type(v)) {
   case JANET_NIL:
     sha1_update(&ctx->hash_ctx, "n", 1);
@@ -95,8 +104,8 @@ static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
     // FIXME XXX This should be sorted order.
     janet_dictionary_view(v, &kvs, &len, &cap);
     while ((kv = janet_dictionary_next(kvs, cap, kv))) {
-      hash_add(ctx, hash_cache, kv->key);
-      hash_add(ctx, hash_cache, kv->value);
+      hash_add(ctx, kv->key);
+      hash_add(ctx, kv->value);
     }
     break;
   }
@@ -105,7 +114,7 @@ static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
     const Janet *t = janet_unwrap_tuple(v);
     int32_t len = janet_tuple_length(t);
     for (int32_t i = 0; i < len; i++) {
-      hash_add(ctx, hash_cache, t[i]);
+      hash_add(ctx, t[i]);
     }
     break;
   }
@@ -122,12 +131,12 @@ static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
       } else {
         /* Not on stack */
         for (j = 0; j < env->length; j++) {
-          hash_add(ctx, hash_cache, env->as.values[j]);
+          hash_add(ctx, env->as.values[j]);
         }
       }
     }
 
-    hash_funcdef(ctx, hash_cache, func->def);
+    hash_funcdef(ctx, func->def);
     break;
   }
   case JANET_CFUNCTION: {
@@ -137,19 +146,14 @@ static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
     break;
   }
   case JANET_ABSTRACT: {
-    sha1_update(&ctx->hash_ctx, "a", 1);
     if (janet_checkabstract(v, &pkg_type)) {
       sha1_update(&ctx->hash_ctx, "p", 1);
       Pkg *pkg = janet_unwrap_abstract(v);
-      hash_add(ctx, hash_cache, janet_wrap_function(pkg->builder));
+      JanetString hash = hash2(janet_wrap_function(pkg->builder));
+      sha1_update(&ctx->hash_ctx, (char *)hash, janet_string_length(hash));
       break;
     } else {
-      // XXX TODO:
-      // Some builtins are so valuable, we must be able to hash them...
-      // PEG, int/s64 int/u64
-      // marshal may be a way to cheat, but it doesn't solve the problem
-      // of walking the embedded rules...
-      break;
+      // Fall through
     }
   }
   default:
@@ -158,25 +162,29 @@ static void hash_add(HashContext *ctx, JanetTable *hash_cache, Janet v) {
   }
 }
 
-static Janet hash2(HashContext *ctx, JanetTable *hash_cache, Janet v) {
-  hash_add(ctx, hash_cache, v);
-  JanetBuffer *b = janet_buffer(HASH_SZ);
-  janet_buffer_setcount(b, HASH_SZ);
-  sha1_final(&ctx->hash_ctx, b->data);
+static JanetString hash2(Janet v) {
+  if (janet_checkabstract(v, &pkg_type)) {
+    Pkg *pkg = janet_unwrap_abstract(v);
+    if (!pkg->hash) {
+      assert(pkg->builder);
+      pkg->hash = hash2(janet_wrap_function(pkg->builder));
+    }
+    return pkg->hash;
+  }
+
+  HashContext *ctx = new_hash_context();
+  unsigned char hbuf[HASH_SZ];
+  hash_add(ctx, v);
+  sha1_final(&ctx->hash_ctx, hbuf);
   janet_sfree(ctx);
-  return janet_wrap_buffer(b);
+  JanetString hash = janet_string(hbuf, HASH_SZ);
+  return hash;
 }
 
 static Janet hash(int argc, Janet *argv) {
-  janet_fixarity(argc, 2);
-  HashContext *ctx = new_hash_context();
-  JanetTable *hash_cache = janet_gettable(argv, 0);
-  Janet v = argv[1];
-  // TODO
-  // We must add the build architecture,
-  // Janet version and store path to the hash.
-  // These invalidate the hash cache.
-  return hash2(ctx, hash_cache, v);
+  janet_fixarity(argc, 1);
+  Janet v = argv[0];
+  return janet_wrap_string(hash2(v));
 }
 
 static void direct_dependencies2(JanetTable *deps, Janet v);
@@ -228,7 +236,8 @@ static void direct_dependencies2(JanetTable *deps, Janet v) {
       JanetFuncEnv *env = func->envs[i];
       if (env->offset) {
         /* On stack */
-        janet_panic("cannot hash function with a stack env");
+        janet_panic(
+            "cannot extract dependencies from closures with stack envs");
       } else {
         /* Not on stack */
         for (j = 0; j < env->length; j++) {
@@ -261,7 +270,7 @@ static Janet direct_dependencies(int argc, Janet *argv) {
 }
 
 static const JanetReg cfuns[] = {{"pkg", pkg, "(x/pkg builder)\n"},
-                                 {"hash", hash, "(x/hash cache v)\n"},
+                                 {"hash", hash, "(x/hash v)\n"},
                                  {"direct-dependencies", direct_dependencies,
                                   "(x/direct-dependencies pkg)\n"},
                                  {NULL, NULL, NULL}};
