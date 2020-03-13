@@ -3,10 +3,21 @@
 #include <assert.h>
 #include <janet.h>
 
+#define HASH_SZ 20
+
+typedef struct {
+  struct sha1_context hash_ctx;
+} HashContext;
+
 typedef struct {
   JanetFunction *builder;
   JanetString hash;
+  JanetString path;
 } Pkg;
+
+static JanetString hash(Janet v);
+static void hash_add(HashContext *ctx, Janet v);
+static Janet pkg_get_hash(int argc, Janet *argv);
 
 static int pkg_gcmark(void *p, size_t s) {
   (void)s;
@@ -14,39 +25,39 @@ static int pkg_gcmark(void *p, size_t s) {
   if (pkg->hash) {
     janet_mark(janet_wrap_string(pkg->hash));
   }
+  if (pkg->path) {
+    janet_mark(janet_wrap_string(pkg->path));
+  }
   if (pkg->builder) {
     janet_mark(janet_wrap_function(pkg->builder));
   }
   return 0;
 }
 
-static const JanetAbstractType pkg_type = {
-    "x/pkg", NULL, pkg_gcmark, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-
-static Janet pkg(int argc, Janet *argv) {
-  janet_fixarity(argc, 1);
-  JanetFunction *func = janet_getfunction(argv, 0);
-  Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
-  pkg->builder = func;
-  pkg->hash = NULL;
-  return janet_wrap_abstract(pkg);
+static int pkg_get(void *ptr, Janet key, Janet *out) {
+  Pkg *p = ptr;
+  if (janet_keyeq(key, "hash")) {
+    *out = janet_wrap_string(p->hash);
+    return 1;
+  } else if (janet_keyeq(key, "path")) {
+    *out = janet_wrap_string(p->path);
+    return 1;
+  } else if (janet_keyeq(key, "builder")) {
+    *out = janet_wrap_function(p->builder);
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
-#define HASH_SZ 20
-
-typedef struct {
-  struct sha1_context hash_ctx;
-} HashContext;
+static const JanetAbstractType pkg_type = {
+    "x/pkg", NULL, pkg_gcmark, pkg_get, NULL, NULL, NULL, NULL, NULL, NULL};
 
 static HashContext *new_hash_context() {
   HashContext *ctx = janet_smalloc(sizeof(HashContext));
   sha1_init(&ctx->hash_ctx);
   return ctx;
 }
-
-static Janet hash(int argc, Janet *argv);
-static JanetString hash2(Janet v);
-static void hash_add(HashContext *ctx, Janet v);
 
 static void hash_funcdef(HashContext *ctx, JanetFuncDef *def) {
   int32_t i;
@@ -149,8 +160,8 @@ static void hash_add(HashContext *ctx, Janet v) {
     if (janet_checkabstract(v, &pkg_type)) {
       sha1_update(&ctx->hash_ctx, "p", 1);
       Pkg *pkg = janet_unwrap_abstract(v);
-      JanetString hash = hash2(janet_wrap_function(pkg->builder));
-      sha1_update(&ctx->hash_ctx, (char *)hash, janet_string_length(hash));
+      sha1_update(&ctx->hash_ctx, (char *)pkg->hash,
+                  janet_string_length(pkg->hash));
       break;
     } else {
       // Fall through
@@ -162,29 +173,43 @@ static void hash_add(HashContext *ctx, Janet v) {
   }
 }
 
-static JanetString hash2(Janet v) {
-  if (janet_checkabstract(v, &pkg_type)) {
-    Pkg *pkg = janet_unwrap_abstract(v);
-    if (!pkg->hash) {
-      assert(pkg->builder);
-      pkg->hash = hash2(janet_wrap_function(pkg->builder));
-    }
-    return pkg->hash;
+static JanetString base16_encode(uint8_t *bytes, size_t nbytes) {
+  size_t ntmp = nbytes * 2;
+  uint8_t *tmp = janet_smalloc(ntmp);
+  char *chartab = "0123456789abcdef";
+  for (size_t i = 0; i < nbytes; i++) {
+    uint8_t c = bytes[i];
+    tmp[2 * i] = chartab[(c & 0xf0) >> 4];
+    tmp[2 * i + 1] = chartab[c & 0x0f];
   }
-
-  HashContext *ctx = new_hash_context();
-  unsigned char hbuf[HASH_SZ];
-  hash_add(ctx, v);
-  sha1_final(&ctx->hash_ctx, hbuf);
-  janet_sfree(ctx);
-  JanetString hash = janet_string(hbuf, HASH_SZ);
-  return hash;
+  JanetString r = janet_string(tmp, ntmp);
+  janet_sfree(tmp);
+  return r;
 }
 
-static Janet hash(int argc, Janet *argv) {
+static Janet pkg(int argc, Janet *argv) {
+  unsigned char hbuf[HASH_SZ];
+
   janet_fixarity(argc, 1);
-  Janet v = argv[0];
-  return janet_wrap_string(hash2(v));
+  JanetFunction *func = janet_getfunction(argv, 0);
+  Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
+  pkg->builder = func;
+  HashContext *ctx = new_hash_context();
+  // XXX TODO, other pkg params.
+  hash_add(ctx, janet_wrap_function(pkg->builder));
+  sha1_final(&ctx->hash_ctx, hbuf);
+  janet_sfree(ctx);
+  // XXX We probably want a larger base covering more of the ascii range.
+  pkg->hash = base16_encode(hbuf, HASH_SZ);
+
+  // XXX configurable.
+  char *prefix = "/tmp/xstore/pkgs";
+  size_t pathsz = strlen(prefix) + janet_string_length(pkg->hash) + 1;
+  char *tmppath = janet_smalloc(pathsz);
+  snprintf(tmppath, pathsz, "%s/%s", prefix, pkg->hash);
+  pkg->path = janet_string((uint8_t *)tmppath, pathsz - 1);
+  janet_sfree(tmppath);
+  return janet_wrap_abstract(pkg);
 }
 
 static void direct_dependencies2(JanetTable *deps, Janet v);
@@ -270,7 +295,6 @@ static Janet direct_dependencies(int argc, Janet *argv) {
 }
 
 static const JanetReg cfuns[] = {{"pkg", pkg, "(x/pkg builder)\n"},
-                                 {"hash", hash, "(x/hash v)\n"},
                                  {"direct-dependencies", direct_dependencies,
                                   "(x/direct-dependencies pkg)\n"},
                                  {NULL, NULL, NULL}};
