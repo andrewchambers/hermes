@@ -23,9 +23,10 @@
   (assert (struct? pkg))
   (assert (function? (pkg :builder)))
 
-  (def pkgout (do
-                (def hash (base16/encode (_x/hash *hash-cache* (pkg :builder))))
-                (path/join *store-path* hash)))
+  (def pkgout (->> (pkg :builder)
+                (_x/hash *hash-cache* )
+                (base16/encode)
+                (path/join *store-path*)))
 
   (def pkg-info-path (path/join pkgout ".xpkg.jdn"))
   (when (not (os/stat pkg-info-path))
@@ -54,17 +55,28 @@
     (let [tmp-info (string pkg-info-path ".tmp")]
       (spit tmp-info "Some bogus info...")
       (os/rename tmp-info pkg-info-path)))
-  
 
   pkgout)
 
+(defn pkg
+  [&keys {
+    :builder builder
+  }]
+  (_x/pkg builder))
 
-(def my-pkg {
-  :builder
-  (fn pkg []
-    (print "Building package!")
-    (spit (path/join (dyn :pkgout) "hello.txt") "hello world!"))
-})
+(def my-pkg1
+  (pkg
+    :builder
+    (fn []
+      (spit (string (dyn :pkgout) "/hello1.txt") "hello world 1!"))))
 
+(def my-pkg2
+  (pkg
+    :builder
+    (fn []
+      (spit (string (dyn :pkgout) "/hello2.txt") (my-pkg1 :path)))))
 
-(pp (build my-pkg))
+(pp my-pkg1)
+(pp my-pkg2)
+
+(pp (_x/direct-dependencies my-pkg2))
