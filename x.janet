@@ -24,12 +24,16 @@
     (sh/$ ["rm" "-vrf" pkgout]))
   (sh/$ ["mkdir" "-pv" pkgout])
   (def env (save-env))
-  (defer (restore-env env)
+  (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
+  (defer (do
+           (restore-env env)
+           (sh/$ ["rm" "-rf" tmpdir]))
     # Wipe env so package builds
     # don't accidentally rely on any state.
     (eachk k (env :environ)
       (os/setenv k nil))
-    (os/cd pkgout)
+
+    (os/cd tmpdir)
     (with-dyns [:pkgout pkgout]
       # TODO Work out how to privsep builder.
       # Marshal builder to different process?
@@ -74,17 +78,86 @@
   }]
   (_x/pkg builder))
 
-(def my-pkg1
+
+(defn- assert-path-hash
+  [path hash]
+  (match (string/split ":" hash)
+    ["sha256" hash]
+      (do
+        (def path (string path))
+        (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
+        (def actual-hash
+           (as-> (sh/$$_ [sha256sum-bin path]) _
+              (string _)
+              (string/split " " _)
+              (first _)))
+        (unless (= hash actual-hash)
+          (error (string/format "expected %v to have hash sha256:%s got sha256:%s" path hash actual-hash))))
+    _ 
+      (error (string "unsupported hash format - " hash)))
+    nil)
+
+(defn fetch
+  [&keys {
+    :url url
+    :hash hash
+    :dest dest
+  }]
+  (default hash "sha256:unknown")
+  (def url
+    (if (or (string/has-prefix? "." url)
+            (string/has-prefix? "/" url))
+      (string "file://" (path/abspath url))
+      url))
+  # XXX fetch should work from within a sandbox.
+  # in this can be done via a fetch protocol
+  # over a unix socket. For out proof of concept
+  # we just fake it.
+  #
+  # XXX In the final version, the hash of the download should be verified
+  # via the sandbox server.
+  (def curl-bin (comptime (string (sh/$$_ ["which" "curl"]))))
+  (print "fetching " url " -> " dest)
+  (sh/$ [curl-bin "-L" "-o" dest url])
+  (assert-path-hash dest hash))
+
+(defn unpack
+  [&keys {
+    :path path
+    :dest dest
+  }]
+  (print "unpacking " path)
+  (def tar-bin (comptime (string (sh/$$_ ["which" "tar"]))))
+  (sh/$ ["tar" "-vxzf" path "-C" dest]))
+
+(def bootstrap
   (pkg
     :builder
     (fn []
-      (spit (string (dyn :pkgout) "/hello1.txt") "hello world 1!"))))
+      (fetch 
+        :url "https://github.com/andrewchambers/hpkgs-seeds/raw/v0.0.1/linux-x86_64-seed.tar.gz"
+        :hash "sha256:b224a5368310894d2e64a0ba4032b187098473865b02c0bbf55add35576070a8"
+        :dest "./seed.tar.gz")
+      (unpack
+        :path "./seed.tar.gz"
+        :dest (dyn :pkgout)))))
 
-(def my-pkg2
+(def amazing-package
   (pkg
     :builder
     (fn []
-      (spit (string (dyn :pkgout) "/hello2.txt") (my-pkg1 :path)))))
+      (pp (hermes-seed :path))
+      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
+      (spit "./hello-world.c" ` 
+        #include <stdio.h>
+        int main () {
+          printf("hello world!");
+        }
+      `)
+      (def bindir (string (dyn :pkgout) "/bin"))
+      (sh/$ ["mkdir" bindir])
+      (sh/$ ["x86_64-linux-musl-cc" "--static" "./hello-world.c" "-o" (string bindir "/hello")]))))
 
 
-(build my-pkg2)
+(build amazing-package)
+(pp (amazing-package :path))

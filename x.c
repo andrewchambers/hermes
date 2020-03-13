@@ -164,7 +164,8 @@ static void hash_add(HashContext *ctx, Janet v) {
                   janet_string_length(pkg->hash));
       break;
     } else {
-      // Fall through
+      // XXX we should only hash core/peg and a few other select types.
+      break;
     }
   }
   default:
@@ -278,8 +279,11 @@ static void direct_dependencies2(JanetTable *deps, Janet v) {
     if (janet_checkabstract(v, &pkg_type)) {
       janet_table_put(deps, v, janet_wrap_boolean(1));
       break;
+    } else {
+      // XXX
+      // We should only support core/peg
+      break;      
     }
-    // Fall through...
   }
   default:
     janet_panicf("Cannot extract package dependencies from %v", v);
