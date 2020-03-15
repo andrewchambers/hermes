@@ -16,39 +16,43 @@
 
 (defn- build-one
   [pkg]
-  (def pkgout (pkg :path))
-  (def pkg-info-path (path/join pkgout ".xpkg.jdn"))
+  (def pkg-out (pkg :path))
+  (def pkg-info-path (path/join pkg-out ".xpkg.jdn"))
   (when (not (os/stat pkg-info-path))
 
-  (when (os/stat pkgout)
-    (sh/$ ["rm" "-vrf" pkgout]))
-  (sh/$ ["mkdir" "-pv" pkgout])
-  (def env (save-env))
-  (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
-  (defer (do
-           (restore-env env)
-           (sh/$ ["rm" "-rf" tmpdir]))
-    # Wipe env so package builds
-    # don't accidentally rely on any state.
-    (eachk k (env :environ)
-      (os/setenv k nil))
+    (when (os/stat pkg-out)
+      (sh/$ ["chmod" "-v" "-R" "u+w" pkg-out])
+      (sh/$ ["rm" "-vrf" pkg-out]))
+    (sh/$ ["mkdir" "-pv" pkg-out])
+    (def env (save-env))
+    (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
+    (defer (do
+             (restore-env env)
+             (sh/$ ["chmod" "-R" "u+w" tmpdir])
+             (sh/$ ["rm" "-rf" tmpdir]))
+      # Wipe env so package builds
+      # don't accidentally rely on any state.
+      (eachk k (env :environ)
+        (os/setenv k nil))
 
-    (os/cd tmpdir)
-    (with-dyns [:pkgout pkgout]
-      # TODO Work out how to privsep builder.
-      # Marshal builder to different process?
-      ((pkg :builder))))
-  
-  # TODO Freeze package on disk nix style
-  # TODO Scan for package dependencies references
-  # and write the gc roots.
-  # TODO write other hermes attributes in jdn format.
-  # Force roots, ignore roots etc.
-  (let [tmp-info (string pkg-info-path ".tmp")]
-    (spit tmp-info "Some bogus info...")
-    (os/rename tmp-info pkg-info-path)))
+      (os/cd tmpdir)
+      (with-dyns [:pkg-out pkg-out]
+        # TODO Work out how to privsep builder.
+        # Marshal builder to different process?
+        ((pkg :builder))))
+    
+    # TODO Scan for package dependencies references
+    
+    (let [tmp-info (string pkg-info-path ".tmp")]
+      (spit tmp-info "Some bogus info...")
+      (os/rename tmp-info pkg-info-path))
 
-  pkgout)
+    # Set package permissions.
+    (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" pkg-out]))
+
+  # TODO Mark package complete.
+
+  pkg-out)
 
 (defn build-order
   [pkg]
@@ -74,10 +78,43 @@
 
 (defn pkg
   [&keys {
+    :name name
     :builder builder
+    :out-hash out-hash
   }]
-  (_x/pkg builder))
+  (_x/pkg builder name out-hash))
 
+(defn dtar
+  "Tar a directory into a 'deterministic tar'. The
+  resulting tarball has lexically sorted filenames,
+  fixed users, and only the executable bit is preserved.
+  
+  Out can be a file or buffer.
+
+  returns outs."
+
+  [path &opt out]
+  (default out @"")
+  (def wd (os/cwd))
+  (defer (os/cd wd)
+    (os/cd path)
+    (sh/$
+      (sh/pipeline [
+        ["find" "." "-print0"]
+        ["sort" "-z"]
+        ["tar"
+          "-c"
+          "-f" "-"
+          "--numeric-owner"
+          "--owner=0"
+          "--group=0"
+          "--mode=go-rwx,u-rw"
+          "--mtime=1970-01-01"
+          "--no-recursion"
+          "--null"
+          "--files-from" "-"]
+      ]) :redirects [[stdout out]]))
+  out)
 
 (defn- assert-path-hash
   [path hash]
@@ -117,7 +154,6 @@
   # XXX In the final version, the hash of the download should be verified
   # via the sandbox server.
   (def curl-bin (comptime (string (sh/$$_ ["which" "curl"]))))
-  (print "fetching " url " -> " dest)
   (sh/$ [curl-bin "-L" "-o" dest url])
   (assert-path-hash dest hash))
 
@@ -126,7 +162,6 @@
     :path path
     :dest dest
   }]
-  (print "unpacking " path)
   (def tar-bin (comptime (string (sh/$$_ ["which" "tar"]))))
   (sh/$ ["tar" "-vxzf" path "-C" dest]))
 
@@ -140,13 +175,12 @@
         :dest "./seed.tar.gz")
       (unpack
         :path "./seed.tar.gz"
-        :dest (dyn :pkgout)))))
+        :dest (dyn :pkg-out)))))
 
 (def amazing-package
   (pkg
     :builder
     (fn []
-      (pp (hermes-seed :path))
       (os/setenv "PATH" (string (bootstrap :path) "/bin"))
       (spit "./hello-world.c" ` 
         #include <stdio.h>
@@ -154,10 +188,9 @@
           printf("hello world!");
         }
       `)
-      (def bindir (string (dyn :pkgout) "/bin"))
+      (def bindir (string (dyn :pkg-out) "/bin"))
       (sh/$ ["mkdir" bindir])
       (sh/$ ["x86_64-linux-musl-cc" "--static" "./hello-world.c" "-o" (string bindir "/hello")]))))
-
 
 (build amazing-package)
 (pp (amazing-package :path))

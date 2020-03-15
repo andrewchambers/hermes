@@ -2,6 +2,7 @@
 #include <alloca.h>
 #include <assert.h>
 #include <janet.h>
+#include <unistd.h>
 
 #define HASH_SZ 20
 
@@ -13,6 +14,8 @@ typedef struct {
   JanetFunction *builder;
   JanetString hash;
   JanetString path;
+  JanetString name;
+  JanetString out_hash;
 } Pkg;
 
 static JanetString hash(Janet v);
@@ -31,19 +34,35 @@ static int pkg_gcmark(void *p, size_t s) {
   if (pkg->builder) {
     janet_mark(janet_wrap_function(pkg->builder));
   }
+  if (pkg->name) {
+    janet_mark(janet_wrap_string(pkg->name));
+  }
+  if (pkg->out_hash) {
+    janet_mark(janet_wrap_string(pkg->out_hash));
+  }
   return 0;
 }
 
 static int pkg_get(void *ptr, Janet key, Janet *out) {
-  Pkg *p = ptr;
+  Pkg *pkg = ptr;
   if (janet_keyeq(key, "hash")) {
-    *out = janet_wrap_string(p->hash);
+    *out = janet_wrap_string(pkg->hash);
     return 1;
   } else if (janet_keyeq(key, "path")) {
-    *out = janet_wrap_string(p->path);
+    *out = janet_wrap_string(pkg->path);
     return 1;
   } else if (janet_keyeq(key, "builder")) {
-    *out = janet_wrap_function(p->builder);
+    *out = janet_wrap_function(pkg->builder);
+    return 1;
+  } else if (janet_keyeq(key, "name")) {
+    if (pkg->name) {
+      *out = janet_wrap_string(pkg->name);
+    }
+    return 1;
+  } else if (janet_keyeq(key, "out-hash")) {
+    if (pkg->out_hash) {
+      *out = janet_wrap_string(pkg->out_hash);
+    }
     return 1;
   } else {
     return 0;
@@ -163,10 +182,39 @@ static void hash_add(HashContext *ctx, Janet v) {
       sha1_update(&ctx->hash_ctx, (char *)pkg->hash,
                   janet_string_length(pkg->hash));
       break;
-    } else {
-      // XXX we should only hash core/peg and a few other select types.
+    } else if (janet_checkabstract(v, &janet_peg_type)) {
+      JanetPeg *peg = janet_unwrap_abstract(v);
+      sha1_update(&ctx->hash_ctx, "b", 1);
+      for (size_t i = 0; i < peg->num_constants; i++) {
+        hash_add(ctx, peg->constants[i]);
+      }
+      sha1_update(&ctx->hash_ctx, "c", 1);
+      for (size_t i = 0; i < peg->bytecode_len; i++) {
+        sha1_update(&ctx->hash_ctx, (char *)&peg->bytecode[i],
+                    sizeof(peg->bytecode[i]));
+      }
+      break;
+    } else if (janet_checkabstract(v, &janet_file_type)) {
+      sha1_update(&ctx->hash_ctx, "c", 1);
+
+      FILE *f = janet_unwrapfile(v, NULL);
+
+      switch (fileno(f)) {
+      case STDIN_FILENO:
+        sha1_update(&ctx->hash_ctx, "i", 1);
+        break;
+      case STDOUT_FILENO:
+        sha1_update(&ctx->hash_ctx, "o", 1);
+        break;
+      case STDERR_FILENO:
+        sha1_update(&ctx->hash_ctx, "e", 1);
+        break;
+      default:
+        janet_panicf("cannot file that is not stdin, stderr or stdout %v", v);
+      }
       break;
     }
+    /* FALLTHROUGH */
   }
   default:
     janet_panicf("cannot hash %v", v);
@@ -191,13 +239,48 @@ static JanetString base16_encode(uint8_t *bytes, size_t nbytes) {
 static Janet pkg(int argc, Janet *argv) {
   unsigned char hbuf[HASH_SZ];
 
-  janet_fixarity(argc, 1);
-  JanetFunction *func = janet_getfunction(argv, 0);
+  janet_fixarity(argc, 3);
+
   Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
-  pkg->builder = func;
+
+  pkg->builder = janet_getfunction(argv, 0);
+  pkg->hash = NULL;
+  pkg->path = NULL;
+  pkg->name = NULL;
+  pkg->out_hash = NULL;
+
+  if (janet_checktype(argv[1], JANET_STRING)) {
+    pkg->name = janet_unwrap_string(argv[1]);
+    // XXX validate name? must be valid path?
+    // Must be under a certain length.
+    // Some of these restrictions would automatically
+    // be exposed in failed builds.
+  } else {
+    if (!janet_checktype(argv[1], JANET_NIL)) {
+      janet_panicf("expected package name to be a string, got %v", argv[1]);
+    }
+  }
+
+  if (janet_checktype(argv[2], JANET_STRING)) {
+    pkg->out_hash = janet_unwrap_string(argv[2]);
+  } else {
+    if (!janet_checktype(argv[2], JANET_NIL)) {
+      janet_panicf("expected package out-hash to be a string, got %v", argv[2]);
+    }
+  }
+
   HashContext *ctx = new_hash_context();
-  // XXX TODO, other pkg params.
+
+  sha1_update(&ctx->hash_ctx, "b", 1);
   hash_add(ctx, janet_wrap_function(pkg->builder));
+  sha1_update(&ctx->hash_ctx, "n", 1);
+  if (pkg->name) {
+    hash_add(ctx, janet_wrap_string(pkg->name));
+  }
+  sha1_update(&ctx->hash_ctx, "o", 1);
+  if (pkg->out_hash) {
+    hash_add(ctx, janet_wrap_string(pkg->out_hash));
+  }
   sha1_final(&ctx->hash_ctx, hbuf);
   janet_sfree(ctx);
   // XXX We probably want a larger base covering more of the ascii range.
@@ -279,14 +362,18 @@ static void direct_dependencies2(JanetTable *deps, Janet v) {
     if (janet_checkabstract(v, &pkg_type)) {
       janet_table_put(deps, v, janet_wrap_boolean(1));
       break;
-    } else {
-      // XXX
-      // We should only support core/peg
-      break;      
+    } else if (janet_checkabstract(v, &janet_peg_type)) {
+      JanetPeg *peg = janet_unwrap_abstract(v);
+      for (size_t i = 0; i < peg->num_constants; i++) {
+        direct_dependencies2(deps, peg->constants[i]);
+      }
+      break;
+    } else if (janet_checkabstract(v, &janet_file_type)) {
+      break;
     }
   }
   default:
-    janet_panicf("Cannot extract package dependencies from %v", v);
+    janet_panicf("cannot extract package dependencies from %v", v);
   }
 }
 
