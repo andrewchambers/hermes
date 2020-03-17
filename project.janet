@@ -1,15 +1,16 @@
 (declare-project
-  :name "x"
+  :name "hermes"
   :author "Andrew Chambers"
   :license "MIT"
-  :url "https://github.com/andrewchambers/x"
-  :repo "git+https://github.com/andrewchambers/x.git")
+  :url "https://github.com/andrewchambers/hermes"
+  :repo "git+https://github.com/andrewchambers/hermes.git")
 
 (declare-source
-    :name "x"
-    :source ["x.janet"])
+  :name "hermes"
+  :source ["hermes.janet"])
 
 (declare-native
-    :name "_x"
-    :cflags ["-g"]
-    :source ["x.c" "sha1.c"])
+  :name "_hermes"
+  :cflags ["-g"]
+  :headers ["hermes.h" "sha1.h"]
+  :source ["hermes.c" "util.c" "sha1.c" "pkg_hash.c" "deps.c"])

@@ -144,15 +144,10 @@
   (def url
     (if (or (string/has-prefix? "." url)
             (string/has-prefix? "/" url))
-      (string "file://" (path/abspath url))
+      (do
+        (def tar-bin (comptime (string (sh/$$_ ["which" "readlink"]))))
+        (string "file://" (sh/$ ["readlink" "-f" url])))
       url))
-  # XXX fetch should work from within a sandbox.
-  # in this can be done via a fetch protocol
-  # over a unix socket. For out proof of concept
-  # we just fake it.
-  #
-  # XXX In the final version, the hash of the download should be verified
-  # via the sandbox server.
   (def curl-bin (comptime (string (sh/$$_ ["which" "curl"]))))
   (sh/$ [curl-bin "-L" "-o" dest url])
   (assert-path-hash dest hash))
@@ -177,20 +172,53 @@
         :path "./seed.tar.gz"
         :dest (dyn :pkg-out)))))
 
-(def amazing-package
+(defn make-src-pkg
+  [&keys
+    {:url url
+     :hash hash
+     :fname fname}]
+  (default fname (last (string/split "/" url)))
   (pkg
     :builder
-    (fn []
-      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
-      (spit "./hello-world.c" ` 
-        #include <stdio.h>
-        int main () {
-          printf("hello world!");
-        }
-      `)
-      (def bindir (string (dyn :pkg-out) "/bin"))
-      (sh/$ ["mkdir" bindir])
-      (sh/$ ["x86_64-linux-musl-cc" "--static" "./hello-world.c" "-o" (string bindir "/hello")]))))
+    (fn src-pkg []
+      (fetch 
+        :url url
+        :hash hash
+        :dest (string (dyn :pkg-out) "/" fname)))))
 
-(build amazing-package)
-(pp (amazing-package :path))
+(defmacro defsrc
+  [name & args]
+  ~(def ,name ,(tuple make-src-pkg ;args)))
+
+(defsrc coreutils
+  :url  "https://ftp.gnu.org/gnu/coreutils/coreutils-8.31.tar.xz"
+  :hash "sha256:ff7a9c918edce6b4f4b2725e3f9b37b0c4d193531cac49a48b56c4d0d3a9e9fd")
+
+(def dis (disasm (make-src-pkg)))
+(pp dis)
+(pp (keys dis))
+(printf "%j" (get dis 'bytecode))
+(pp (get dis 'constants))
+(pp (get dis 'environments))
+
+#(pp (disasm (make-src-pkg :url "a" :hash "b" :fname "c")))
+# (pp (disasm coreutils))
+
+#(def amazing-package
+#  (pkg
+#    :builder
+#    (fn []
+#      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
+#      (spit "./hello-world.c" ` 
+#        #include <stdio.h>
+#        int main () {
+#          printf("hello world!");
+#        }
+#      `)
+#      (def bindir (string (dyn :pkg-out) "/bin"))
+#      (sh/$ ["mkdir" bindir])
+#      (sh/$ ["x86_64-linux-musl-cc" "-static" "./hello-world.c" "-o" (string bindir "/hello")]))))
+
+# (pp (coreutils-src :path))
+#(build amazing-package)
+#(pp (amazing-package :path))

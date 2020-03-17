@@ -2,10 +2,10 @@
 #include <inttypes.h>
 
 struct sha1_context {
-  uint32_t h[5];
-  unsigned char buf[64];
-  short len;
-  uint64_t total;
+    uint32_t h[5];
+    unsigned char buf[64];
+    short len;
+    uint64_t total;
 };
 
 /* Exported functions. */
