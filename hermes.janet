@@ -162,4 +162,5 @@
   # TODO flocking
   (def all-dependencies (build-order pkg))
   (each pkg all-dependencies
-    (build-one pkg)))
+    (build-one pkg))
+  (pkg :path))

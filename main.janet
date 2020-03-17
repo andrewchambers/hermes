@@ -53,7 +53,7 @@
   (def pkg (eval-string-in-env (parsed-args "e") env ))
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "-e did not return a valid package, got %v" pkg)))
-  (hermes/build pkg))
+  (print (hermes/build pkg)))
 
 (defn main
   [&]
