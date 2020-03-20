@@ -103,5 +103,6 @@ static const JanetReg cfuns[] = {
 };
 
 JANET_MODULE_ENTRY(JanetTable *env) {
+    janet_register_abstract_type(&pkg_type);
     janet_cfuns(env, "_hermes", cfuns);
 }

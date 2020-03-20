@@ -62,7 +62,8 @@
   dest)
 
 (defn- unpack
-  [path &opt dest &keys {
+  [path &opt &keys {
+    :dest dest
     :strip nstrip
   }]
   (default dest "./")
@@ -96,18 +97,71 @@
   }]
   (_hermes/pkg builder name out-hash))
 
-(def user-env (make-env root-env))
-(put user-env 'pkg    @{:value pkg})
-(put user-env 'fetch  @{:value fetch})
-(put user-env 'unpack @{:value unpack})
-(put user-env 'sh/$   @{:value sh/$})
-(put user-env 'sh/$$  @{:value sh/$$})
-(put user-env 'sh/$$_ @{:value sh/$$_})
-(put user-env 'sh/$?  @{:value sh/$?})
+(defn- save-process-env
+  []
+  {:cwd (os/cwd)
+   :environ (os/environ)})
+
+(defn- restore-process-env
+  [{:cwd cwd
+    :environ environ}]
+  (eachk k environ
+     (os/setenv k (environ k)))
+  (os/cd cwd))
 
 (defn load-pkgs
   [fpath]
-  (dofile fpath :env user-env))
+
+  (defn clear-table 
+    [t]
+    (each k (keys t) # don't mutate while iterating.
+      (put t k 0))
+    t)
+  
+  (defn clear-array
+    [a]
+    (array/remove a 0 (length a))
+    a)
+
+  (def saved-process-env (save-process-env))
+  (def saved-root-env (merge-into @{}))
+  (def saved-mod-paths (array ;module/paths))
+  (def saved-mod-cache (merge-into @{} module/cache))
+
+  (defer (do
+           (clear-table module/cache)
+           (merge-into module/cache saved-mod-cache)
+
+           (clear-array module/paths)
+           (array/concat module/paths saved-mod-paths)
+
+           (clear-table root-env)
+           (merge-into root-env saved-root-env)
+           
+           (restore-process-env saved-process-env))
+      
+    # Configure the pkg loading env.
+    # We update the root env in place so
+    # that every file has the extra builtins.
+    (put root-env 'pkg    @{:value pkg})
+    (put root-env 'fetch  @{:value fetch})
+    (put root-env 'unpack @{:value unpack})
+    (put root-env 'sh/$   @{:value sh/$})
+    (put root-env 'sh/$$  @{:value sh/$$})
+    (put root-env 'sh/$$_ @{:value sh/$$_})
+    (put root-env 'sh/$?  @{:value sh/$?})
+
+    # Clear module cache.
+    (clear-table module/cache)
+    
+    # Remove all paths, to ensure hermetic package env.
+    (defn- check-. [x] (if (string/has-prefix? "." x) x))
+    (clear-array module/paths)
+    (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
+
+    # XXX it would be nice to not exit on error, but raise an error.
+    # this is easier for now though.
+    (dofile fpath :exit true)))
 
 (defn build-order
   [pkg]
@@ -123,19 +177,6 @@
   (def out @[])
   (build-order2 pkg @{} out)
   out)
-
-(defn- save-env
-  []
-  {:cwd (os/cwd)
-   :environ (os/environ)})
-
-(defn- restore-env
-  [{:cwd cwd
-    :environ environ}]
-  (eachk k environ
-     (os/setenv k (environ k)))
-  (os/cd cwd))
-
 
 (defn build
   [pkg]
@@ -154,10 +195,10 @@
         (sh/$ ["chmod" "-v" "-R" "u+w" pkg-out])
         (sh/$ ["rm" "-vrf" pkg-out]))
       (sh/$ ["mkdir" "-v" pkg-out])
-      (def env (save-env))
+      (def env (save-process-env))
       (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
       (defer (do
-               (restore-env env)
+               (restore-process-env env)
                (sh/$ ["chmod" "-R" "u+w" tmpdir])
                (sh/$ ["rm" "-rf" tmpdir]))
         # Wipe env so package builds
@@ -183,13 +224,11 @@
       (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" pkg-out]))
 
     # TODO Mark package complete.
-
     pkg-out)
 
   # TODO flocking
   (def all-dependencies (build-order pkg))
   (each pkg all-dependencies
-    (print "building pkg: " pkg)
     (pkg-hash pkg)
     (build-one pkg)
     (put registry (pkg :builder) '*pkg-already-built*))

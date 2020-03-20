@@ -17,16 +17,18 @@
       (buffer/push-string buf "\n")))
   (var returnval nil)
   (run-context {:chunks chunks
-                :on-compile-error (fn [msg errf &]
-                                    (error (string "compile error: " msg)))
-                :on-parse-error (fn [p x]
-                                  (error (string "parse error: " (parser/error p))))
+                :on-compile-error (fn [x y z]
+                                    (bad-compile x y z)
+                                    (os/exit 1))
+                :on-parse-error (fn [x y]
+                                  (bad-parse x y)
+                                  (os/exit 1))
                 :fiber-flags :i
                 :on-status (fn [f val]
                              (if-not (= (fiber/status f) :dead)
                                (error val))
                              (set returnval val))
-                :source "-e"
+                :source "--expression"
                 :env env})
   returnval)
 
@@ -47,8 +49,8 @@
   
   (def env 
     (if (parsed-args "m")
-      (dofile (parsed-args "m") :exit true :env hermes/user-env)
-      hermes/user-env))
+      (hermes/load-pkgs (parsed-args "m"))
+      root-env))
 
   (def pkg (eval-string-in-env (parsed-args "e") env ))
   (unless (= (type pkg) :hermes/pkg)

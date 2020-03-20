@@ -167,8 +167,6 @@ static void hash_one_def(HashState *st, JanetFuncDef *def, int flags) {
         pushint(st, def->defs_length);
     if (def->flags & JANET_FUNCDEF_FLAG_HASNAME)
         hash_one(st, janet_wrap_string(def->name), flags);
-    if (def->flags & JANET_FUNCDEF_FLAG_HASSOURCE)
-        hash_one(st, janet_wrap_string(def->source), flags);
 
     /* hash constants */
     for (int32_t i = 0; i < def->constants_length; i++)
