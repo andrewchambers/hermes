@@ -14,11 +14,11 @@ typedef struct {
 } HashState;
 
 typedef struct {
-    JanetString hash;
-    JanetFunction *builder;
-    JanetString frozen_builder;
-    JanetString path;
-    JanetString name;
+    Janet hash;  // nil or string
+    Janet builder; // nil function
+    Janet path; // nil or string
+    Janet name; // nil or string
+    Janet out_hash; // nil or string
 } Pkg;
 
 

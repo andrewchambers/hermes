@@ -26,7 +26,6 @@ static void pkg_dependencies2(JanetTable *deps, Janet v) {
     case JANET_STRUCT: {
         const JanetKV *kvs = NULL, *kv = NULL;
         int32_t len, cap;
-        // FIXME XXX This should be sorted order.
         janet_dictionary_view(v, &kvs, &len, &cap);
         while ((kv = janet_dictionary_next(kvs, cap, kv))) {
             pkg_dependencies2(deps, kv->key);
@@ -49,10 +48,8 @@ static void pkg_dependencies2(JanetTable *deps, Janet v) {
         for (i = 0; i < func->def->environments_length; ++i) {
             JanetFuncEnv *env = func->envs[i];
             if (env->offset) {
-                /* On stack */
-                // XXX TODO, we should be able to handle this.
                 janet_panic(
-                    "cannot extract dependencies from closures with stack envs");
+                    "cannot extract dependencies from closure referencing current stack frame");
             } else {
                 /* Not on stack */
                 for (j = 0; j < env->length; j++) {
@@ -87,6 +84,6 @@ Janet pkg_dependencies(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
     JanetTable *deps = janet_table(0);
     Pkg *p = janet_getabstract(argv, 0, &pkg_type);
-    pkg_dependencies2(deps, janet_wrap_function(p->builder));
+    pkg_dependencies2(deps, p->builder);
     return janet_wrap_table(deps);
 }

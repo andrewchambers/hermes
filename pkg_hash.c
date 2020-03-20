@@ -105,7 +105,7 @@ static void hash_one_env(HashState *st, JanetFuncEnv *env, int flags);
 /* Prevent stack overflows */
 #define HASH_STACKCHECK if ((flags & 0xFFFF) > JANET_RECURSION_GUARD) janet_panic("stack overflow")
 
-/* Marshal a function env */
+/* Hash a function env */
 static void hash_one_env(HashState *st, JanetFuncEnv *env, int flags) {
     HASH_STACKCHECK;
     for (int32_t i = 0; i < scratch_v_count(st->seen_envs); i++) {
@@ -116,15 +116,19 @@ static void hash_one_env(HashState *st, JanetFuncEnv *env, int flags) {
         }
     }
     scratch_v_push(st->seen_envs, env);
-    pushint(st, env->offset);
-    pushint(st, env->length);
-    if (env->offset) {
-        /* On stack variant */
-        hash_one(st, janet_wrap_fiber(env->as.fiber), flags + 1);
+    if (env->offset && (JANET_STATUS_ALIVE == janet_fiber_status(env->as.fiber))) {
+        janet_panic("cannot hash closure referencing current fiber frame.");
     } else {
-        /* Off stack variant */
-        for (int32_t i = 0; i < env->length; i++)
-            hash_one(st, env->as.values[i], flags + 1);
+        pushint(st, env->offset);
+        pushint(st, env->length);
+        if (env->offset) {
+            /* On stack variant */
+            hash_one(st, janet_wrap_fiber(env->as.fiber), flags + 1);
+        } else {
+            /* Off stack variant */
+            for (int32_t i = 0; i < env->length; i++)
+                hash_one(st, env->as.values[i], flags + 1);
+        }
     }
 }
 
@@ -240,10 +244,11 @@ static void hash_one_abstract(HashState *st, Janet x, int flags) {
     hash_one(st, janet_csymbolv(at->name), flags + 1);
     if (at == &pkg_type) {
         Pkg *pkg = abstract;
-        if (!pkg->hash) {
-            janet_panic("BUG: package does not have cached hash");
+        if (!janet_checktype(pkg->hash, JANET_STRING)) {
+            janet_panic("package does not have computed hash");
         }
-        pushbytes(st, pkg->hash, janet_string_length(pkg->hash));
+        JanetString hash = janet_unwrap_string(pkg->hash);
+        pushbytes(st, hash, janet_string_length(hash));
     } else {
         janet_panicf("unable to hash %v", x);
     }
@@ -450,17 +455,48 @@ static JanetString finalize_pkg_hash_state(HashState *st) {
     return janet_string(buf, sizeof(buf));
 }
 
+static Janet make_pkg_path(JanetString store_path, JanetString hash) {
+    size_t prefix_sz = janet_string_length(store_path) + 5;
+    size_t ntmp = prefix_sz + janet_string_length(hash)*2;
+    uint8_t *tmp = alloca(ntmp);
+
+    memcpy(tmp, store_path, janet_string_length(store_path));
+    memcpy(tmp + janet_string_length(store_path), "/pkg/", 5);
+
+    uint8_t *hashout = tmp + prefix_sz;
+    char *chartab = "0123456789abcdef";
+    for (size_t i = 0; i < janet_string_length(hash); i++) {
+        uint8_t c = hash[i];
+        hashout[2 * i] = chartab[(c & 0xf0) >> 4];
+        hashout[2 * i + 1] = chartab[c & 0x0f];
+    }
+    return janet_stringv(tmp, ntmp);
+}
+
 Janet pkg_hash(int32_t argc, Janet *argv) {
-    janet_fixarity(argc, 4);
-    JanetString store_path = janet_getstring(argv, 0);
-    JanetTable *rreg = janet_gettable(argv, 1);
-    JanetFunction *builder = janet_getfunction(argv, 2);
-    JanetString name = janet_getstring(argv, 3);
+    janet_fixarity(argc, 3);
+
+    if (!janet_checktypes(argv[0], JANET_TFLAG_STRING))
+        janet_panicf("store-path must be a string, got %v", argv[0]);
+
+    if (!janet_checktypes(argv[1], JANET_TFLAG_TABLE))
+        janet_panicf("registry must be a table, got %v", argv[1]);
+
+    if (!janet_checkabstract(argv[2], &pkg_type))
+        janet_panicf("expected a pkg object, got %v", argv[2]);
+
+    JanetString store_path = janet_unwrap_string(argv[0]);
+    JanetTable *rreg = janet_unwrap_table(argv[1]);
+    Pkg *pkg = janet_unwrap_abstract(argv[2]);
     HashState st;
     init_pkg_hash_state(&st, rreg);
     hash_one(&st, janet_wrap_string(store_path), 0);
-    hash_one(&st, janet_wrap_function(builder), 0);
-    hash_one(&st, janet_wrap_string(name), 0);
+    hash_one(&st, pkg->name, 0);
+    hash_one(&st, pkg->builder, 0);
+
     JanetString hash = finalize_pkg_hash_state(&st);
-    return janet_wrap_string(hash);
+    pkg->hash = janet_wrap_string(hash);
+    pkg->path = make_pkg_path(store_path, hash);
+
+    return pkg->hash;
 }
