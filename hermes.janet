@@ -163,30 +163,51 @@
     # this is easier for now though.
     (dofile fpath :exit true)))
 
-(defn build-order
+(defn compute-dep-info
   [pkg]
-  (defn build-order2
-    [pkg visited out]
-    (if (visited pkg)
+  (def deps @{})
+  (def order @[])
+  (defn compute-dep-info2
+    [pkg]
+    (if (deps pkg)
       nil
-      (let [deps (_hermes/pkg-dependencies pkg)]
-        (put visited pkg true)
-        (eachk dep deps
-          (build-order2 dep visited out))
-        (array/push out pkg))))
-  (def out @[])
-  (build-order2 pkg @{} out)
-  out)
+      (let [direct-deps (_hermes/pkg-dependencies pkg)]
+        (put deps pkg (keys direct-deps))
+        (eachk dep direct-deps
+          (compute-dep-info2 dep))
+        (array/push order pkg))))
+  (compute-dep-info2 pkg)
+  {:deps deps
+   :order order})
 
 (defn build
   [pkg]
 
+  # Copy registry so we can update it as we build packages.
   (def registry (merge-into @{} builder-registry))
   (def load-registry (invert registry))
   (put load-registry '*pkg-already-built* (fn [&] nil))
 
-  (defn- build-one
+  (def dep-info (compute-dep-info pkg))
+  (each p (dep-info :order)
+    # Hash the packages in order as children must be hashed first.
+    (pkg-hash p))
+
+  (defn has-pkg
     [pkg]
+    (def pkg-info-path (string (pkg :path) "/.xpkg.jdn"))
+    (truthy? (os/stat pkg-info-path)))
+
+  (defn build2
+    [pkg]
+    
+    (def deps (dep-info :deps))
+    
+    (each dep (get-in dep-info [:deps pkg])
+      (unless (has-pkg dep)
+        (build2 dep))
+      (put registry (dep :builder) '*pkg-already-built*))
+
     (def out-hash (pkg :out-hash))
     (def pkg-out (pkg :path))
     (def pkg-info-path (string pkg-out "/.xpkg.jdn"))
@@ -226,10 +247,4 @@
     # TODO Mark package complete.
     pkg-out)
 
-  # TODO flocking
-  (def all-dependencies (build-order pkg))
-  (each pkg all-dependencies
-    (pkg-hash pkg)
-    (build-one pkg)
-    (put registry (pkg :builder) '*pkg-already-built*))
-  (pkg :path))
+  (build2 pkg))

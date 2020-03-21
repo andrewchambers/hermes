@@ -134,5 +134,44 @@
   :src-url
     "https://ftp.gnu.org/gnu/which/which-2.21.tar.gz"
   :src-hash
-    "sha256:088d9a30007446dd85f7efe27403d82177b384713448fb575aa47cb70ff3ba6a")
+    "sha256:81707303a5b68562ef242036d6e697f3a5539679cc6cda1191ac1c3014d09ec4")
+
+(defn make-combined-env
+  [&keys {:name name
+          :bin-pkgs bin-pkgs }]
+  (default bin-pkgs [])
+  (pkg
+    :name name
+    :builder
+    (fn []
+      (os/mkdir (string (dyn :pkg-out) "/bin"))
+      (each pkg bin-pkgs
+        (def pkg-bin-dir (string (pkg :path) "/bin"))
+        (each bin (os/dir pkg-bin-dir)
+          (def from
+            (string (sh/$$_ ["readlink" "-f" (string pkg-bin-dir "/" bin)])))
+          (def to (string (dyn :pkg-out) "/bin/" bin))
+          (unless (os/stat to)
+            (os/link from to true)))))))
+
+(def core-env
+  (make-combined-env
+    :name
+      "core-env"
+    :bin-pkgs
+      [
+        coreutils
+        awk
+        diffutils
+        findutils
+        make
+        patch
+        sed
+        grep
+        which
+        tar
+        gzip
+        lzip
+        xz
+      ]))
 
