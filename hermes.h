@@ -21,7 +21,6 @@ typedef struct {
     Janet out_hash; // nil or string
 } Pkg;
 
-
 /* hermes.c */
 
 extern const JanetAbstractType pkg_type;
@@ -29,6 +28,10 @@ extern const JanetAbstractType pkg_type;
 /* pkg_hash.c */
 
 Janet pkg_hash(int32_t argc, Janet *argv);
+
+/* refscan.c */
+
+Janet ref_scan(int32_t argc, Janet *argv);
 
 /* deps.c */
 

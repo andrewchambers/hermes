@@ -13,4 +13,4 @@
   :name "_hermes"
   :cflags ["-g"]
   :headers ["hermes.h" "sha1.h"]
-  :source ["hermes.c" "util.c" "sha1.c" "pkg_hash.c" "deps.c"])
+  :source ["hermes.c" "util.c" "sha1.c" "pkghash.c" "deps.c" "refscan.c"])

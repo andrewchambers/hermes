@@ -232,10 +232,10 @@
           (def builder (unmarshal frozen-builder load-registry))
           (builder)))
       
-      # TODO Scan for package dependencies references
-
       (when out-hash
         (assert-dir-hash pkg-out out-hash))
+
+
       
       (let [tmp-info (string pkg-info-path ".tmp")]
         (spit tmp-info "Some bogus info...")

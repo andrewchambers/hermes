@@ -89,16 +89,15 @@ static Janet pkg(int argc, Janet *argv) {
     return janet_wrap_abstract(pkg);
 }
 
-
 const JanetAbstractType pkg_type = {
     "hermes/pkg", NULL, pkg_gcmark, pkg_get, NULL, pkg_marshal, pkg_unmarshal, NULL, NULL, NULL
 };
-
 
 static const JanetReg cfuns[] = {
     {"pkg", pkg, NULL},
     {"pkg-hash", pkg_hash, NULL},
     {"pkg-dependencies", pkg_dependencies, NULL},
+    {"ref-scan", ref_scan, NULL},
     {NULL, NULL, NULL}
 };
 
