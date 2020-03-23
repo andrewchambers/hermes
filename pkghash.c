@@ -442,32 +442,38 @@ static void init_pkg_hash_state(HashState *st, JanetTable *rreg) {
     st->seen_envs = NULL;
     st->rreg = rreg;
     janet_table_init(&st->seen, 0);
+    pushbytes(st, (const uint8_t *)JANET_VERSION, strlen(JANET_VERSION));
+}
+
+static void base16_encode(char *outbuf, char *inbuf, size_t in_length) {
+    const char *chartab = "0123456789abcdef";
+    for (size_t i = 0; i < in_length; i++) {
+        uint8_t c = inbuf[i];
+        outbuf[2 * i] = chartab[(c & 0xf0) >> 4];
+        outbuf[2 * i + 1] = chartab[c & 0x0f];
+    }
 }
 
 static JanetString finalize_pkg_hash_state(HashState *st) {
     uint8_t buf[HASH_SZ];
+    uint8_t hexbuf[HASH_SZ*2];
     sha1_final(&st->sha1_ctx, &buf[0]);
+    base16_encode((char*)hexbuf, (char*)buf, sizeof(buf));
     janet_table_deinit(&st->seen);
     scratch_v_free(st->seen_envs);
     scratch_v_free(st->seen_defs);
-    return janet_string(buf, sizeof(buf));
+    return janet_string(hexbuf, sizeof(hexbuf));
 }
 
 static Janet make_pkg_path(JanetString store_path, JanetString hash) {
     size_t prefix_sz = janet_string_length(store_path) + 5;
-    size_t ntmp = prefix_sz + janet_string_length(hash)*2;
+    size_t ntmp = prefix_sz + janet_string_length(hash);
     uint8_t *tmp = alloca(ntmp);
 
     memcpy(tmp, store_path, janet_string_length(store_path));
     memcpy(tmp + janet_string_length(store_path), "/pkg/", 5);
-
     uint8_t *hashout = tmp + prefix_sz;
-    char *chartab = "0123456789abcdef";
-    for (size_t i = 0; i < janet_string_length(hash); i++) {
-        uint8_t c = hash[i];
-        hashout[2 * i] = chartab[(c & 0xf0) >> 4];
-        hashout[2 * i + 1] = chartab[c & 0x0f];
-    }
+    memcpy(hashout, hash, janet_string_length(hash));
     return janet_stringv(tmp, ntmp);
 }
 

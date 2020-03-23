@@ -32,6 +32,17 @@
                 :env env})
   returnval)
 
+(def- init-params
+  ["Init the hermes package store."])
+
+(defn- init
+  []
+  (def parsed-args (argparse/argparse ;init-params))
+  (unless parsed-args
+    (os/exit 1))
+  (hermes/init-store))
+
+
 (def- build-params
   ["Build a hermes package."
    "m" {:kind :option
@@ -39,7 +50,14 @@
         :help "Module path to run expression in."}
    "e" {:kind :option
         :short "e"
-        :help "Expression to build."}])
+        :help "Expression to build."}
+   "o" {:kind :option
+        :short "o"
+        :default "./result"
+        :help "Path to where package output link will be created."}
+   "n" {:kind :flag
+        :short "n"
+        :help "Do not create an output link."}])
 
 (defn- build
   []
@@ -55,13 +73,16 @@
   (def pkg (eval-string-in-env (parsed-args "e") env ))
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "-e did not return a valid package, got %v" pkg)))
-  (print (hermes/build pkg)))
+  (def out-link (unless (parsed-args "n") (parsed-args "o")))
+  (hermes/build pkg out-link)
+  (print (pkg :path)))
 
 (defn main
   [&]
   (def args (dyn :args))
   (with-dyns [:args (array/slice args 1)]
     (match args
+      [_ "init"] (init)
       [_ "build"] (build)
       _ (unknown-command)))
   nil)

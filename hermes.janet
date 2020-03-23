@@ -1,4 +1,6 @@
 (import sh)
+(import sqlite3)
+(import flock)
 (import _hermes)
 
 (def store-path "/tmp/hpkgs")
@@ -163,6 +165,24 @@
     # this is easier for now though.
     (dofile fpath :exit true)))
 
+(defn init-store
+  [&opt path]
+  (default path store-path)
+  (os/mkdir path)
+  (os/mkdir (string path "/lock"))
+  (spit (string path "/lock/gc.lock") "")
+
+  (os/mkdir (string path "/pkg"))
+  (with [db (sqlite3/open (string path "/hermes.db"))]
+    (sqlite3/eval db "begin transaction;")
+    (when (empty? (sqlite3/eval db "select name from sqlite_master where type='table' and name='Meta'"))
+      (sqlite3/eval db "create table Roots(LinkPath text primary key);")
+      (sqlite3/eval db "create table Pkgs(Hash text primary key);")
+      (sqlite3/eval db "create table Meta(Key text primary key, Value text);")
+      (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
+      (sqlite3/eval db "commit;")))
+  nil)
+
 (defn compute-dep-info
   [pkg]
   (def deps @{})
@@ -180,71 +200,92 @@
   {:deps deps
    :order order})
 
-(defn build
+(defn ref-scan
   [pkg]
+  (def ref-set (_hermes/ref-scan store-path pkg @{}))
+  (sorted (keys ref-set)))
+
+(defn build
+  [pkg &opt root]
 
   # Copy registry so we can update it as we build packages.
   (def registry (merge-into @{} builder-registry))
   (def load-registry (invert registry))
   (put load-registry '*pkg-already-built* (fn [&] nil))
 
-  (def dep-info (compute-dep-info pkg))
-  (each p (dep-info :order)
-    # Hash the packages in order as children must be hashed first.
-    (pkg-hash p))
+  (with [flock (flock/acquire (string store-path "/lock/gc.lock") :block :shared)]
+  (with [db (sqlite3/open (string store-path "/hermes.db"))]
+    (def dep-info (compute-dep-info pkg))
+    (each p (dep-info :order)
+      # Hash the packages in order as children must be hashed first.
+      (pkg-hash p))
 
-  (defn has-pkg
-    [pkg]
-    (def pkg-info-path (string (pkg :path) "/.xpkg.jdn"))
-    (truthy? (os/stat pkg-info-path)))
+    (defn has-pkg
+      [pkg]
+      (not (empty? (sqlite3/eval db "select 1 from Pkgs where Hash=:hash" {:hash (pkg :hash)}))))
 
-  (defn build2
-    [pkg]
+    (defn build2
+      [pkg &opt root]
+      (each dep (get-in dep-info [:deps pkg])
+        (unless (has-pkg dep)
+          (build2 dep))
+        (put registry (dep :builder) '*pkg-already-built*))
+
+      (with [flock (flock/acquire (string store-path "/lock/ " (pkg :hash) ".lock") :block :exclusive)]
+        # After aquiring the package lock, check again that it doesn't exist.
+        # This is in case multiple builders were waiting.
+        (when (not (has-pkg pkg))
+          (when (os/stat (pkg :path))
+            (sh/$ ["chmod" "-v" "-R" "u+w" (pkg :path)])
+            (sh/$ ["rm" "-vrf" (pkg :path)]))
+          (sh/$ ["mkdir" "-v" (pkg :path)])
+          (def env (save-process-env))
+          (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
+          (defer (do
+                   (restore-process-env env)
+                   (sh/$ ["chmod" "-R" "u+w" tmpdir])
+                   (sh/$ ["rm" "-rf" tmpdir]))
+            # Wipe env so package builds
+            # don't accidentally rely on any state.
+            (eachk k (env :environ)
+              (os/setenv k nil))
+            (os/cd tmpdir)
+            (with-dyns [:pkg-out (pkg :path)]
+              (def frozen-builder (marshal (pkg :builder) registry))
+              (def builder (unmarshal frozen-builder load-registry))
+              (builder)))
+          
+          (when-let [out-hash (pkg :out-hash)]
+            (assert-dir-hash (pkg :path) out-hash))
+
+          (def scanned-refs (ref-scan pkg))
+          
+          (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
+            :name (pkg :name)
+            :hash (pkg :hash)
+            # We support sending packages built at different store paths.
+            :store-path store-path
+            :scanned-refs scanned-refs
+          }))
+
+          # Set package permissions.
+          (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" (pkg :path)])
+          (sqlite3/eval db "insert into Pkgs(Hash) Values(:hash)" {:hash (pkg :hash)}))
+
+        (when root
+          (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
+          (def tmplink (string root ".hermes-root"))
+          (when (os/stat tmplink)
+            (os/rm tmplink))
+          (os/link (pkg :path) tmplink true)
+          (os/rename tmplink root)))
+
+        nil)
+
+    (build2 pkg root)))
     
-    (def deps (dep-info :deps))
-    
-    (each dep (get-in dep-info [:deps pkg])
-      (unless (has-pkg dep)
-        (build2 dep))
-      (put registry (dep :builder) '*pkg-already-built*))
+    (when-let [gclock (flock/acquire (string store-path "/lock/gc.lock") :noblock :exclusive)]
+      # TODO optimistic cleanup of /locks we created during build.
+      (:close gclock))
 
-    (def out-hash (pkg :out-hash))
-    (def pkg-out (pkg :path))
-    (def pkg-info-path (string pkg-out "/.xpkg.jdn"))
-    (when (not (os/stat pkg-info-path))
-      (when (os/stat pkg-out)
-        (sh/$ ["chmod" "-v" "-R" "u+w" pkg-out])
-        (sh/$ ["rm" "-vrf" pkg-out]))
-      (sh/$ ["mkdir" "-v" pkg-out])
-      (def env (save-process-env))
-      (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
-      (defer (do
-               (restore-process-env env)
-               (sh/$ ["chmod" "-R" "u+w" tmpdir])
-               (sh/$ ["rm" "-rf" tmpdir]))
-        # Wipe env so package builds
-        # don't accidentally rely on any state.
-        (eachk k (env :environ)
-          (os/setenv k nil))
-        (os/cd tmpdir)
-        (with-dyns [:pkg-out pkg-out]
-          (def frozen-builder (marshal (pkg :builder) registry))
-          (def builder (unmarshal frozen-builder load-registry))
-          (builder)))
-      
-      (when out-hash
-        (assert-dir-hash pkg-out out-hash))
-
-
-      
-      (let [tmp-info (string pkg-info-path ".tmp")]
-        (spit tmp-info "Some bogus info...")
-        (os/rename tmp-info pkg-info-path))
-
-      # Set package permissions.
-      (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" pkg-out]))
-
-    # TODO Mark package complete.
-    pkg-out)
-
-  (build2 pkg))
+    nil)

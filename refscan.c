@@ -7,7 +7,6 @@
 #include <errno.h>
 #include "hermes.h"
 
-
 typedef struct {
     enum scan_state {
         ST_PREFIX1,
@@ -22,10 +21,17 @@ typedef struct {
     char hash[HASH_SZ*2];
 } Scanner;
 
+static void init_scanner(Scanner *s, JanetString store_path, JanetTable *hashes) {
+    s->state = ST_PREFIX1;
+    s->hashes = hashes;
+    s->store_path = store_path;
+    s->store_path_len = janet_string_length(store_path);
+    s->n_matched = 0;
+}
+
 static void scan_buf(Scanner *s, char *buf, size_t n) {
     for (size_t i = 0; i < n; i++) {
 again:
-
         switch (s->state) {
         case ST_PREFIX1:
             if (buf[i] == s->store_path[s->n_matched]) {
@@ -39,7 +45,7 @@ again:
                 s->state = ST_PREFIX2;
             }
             break;
-        case ST_PREFIX2:
+        case ST_PREFIX2: {
             if (buf[i] == ("/pkg/"[s->n_matched])) {
                 s->n_matched++;
             } else {
@@ -51,6 +57,8 @@ again:
                 s->n_matched = 0;
                 s->state = ST_HASH;
             }
+            break;
+        }
         case ST_HASH: {
             char c = buf[i];
             if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
@@ -106,20 +114,14 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
     if(lstat((char *)path, &statbuf) != 0)
         janet_panicf("unable to stat %s", path);
 
-    Scanner s;
-    s.state = ST_PREFIX1;
-    s.hashes = hashes;
-    s.store_path = store_path;
-    s.store_path_len = janet_string_length(store_path);
-    s.n_matched = 0;
-
     if (S_ISLNK(statbuf.st_mode)) {
-        char lnkbuf[PATH_MAX+1];
+        char lnkbuf[PATH_MAX];
         ssize_t nchars = readlink((char *)path, lnkbuf, sizeof(lnkbuf));
         if (nchars < 0) {
             janet_panicf("unable to read link at %s", path);
         }
-
+        Scanner s;
+        init_scanner(&s, store_path, hashes);
         scan_buf(&s, lnkbuf, nchars);
     } else if (S_ISREG(statbuf.st_mode)) {
         FILE **f = janet_smalloc(sizeof(FILE*));
@@ -128,6 +130,9 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
         *f = fopen((char *)path, "rb");
         if (!*f)
             janet_panicf("unable to open %s", path);
+
+        Scanner s;
+        init_scanner(&s, store_path, hashes);
         scan_file(&s, *f);
         janet_sfree(f);
     } else if (S_ISDIR(statbuf.st_mode)) {
@@ -147,6 +152,9 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
                     janet_panicf("error reading directory");
                 break;
             }
+            if ((strcmp(de->d_name, ".") == 0) || (strcmp(de->d_name, "..") == 0))
+                continue;
+
             int npath = snprintf(NULL, 0, "%s/%s", path, de->d_name) + 1;
             char *child_path = janet_smalloc(npath+1);
             snprintf(child_path, npath+1, "%s/%s", path, de->d_name);
@@ -157,16 +165,19 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
     } else {
         janet_panicf("unsupported scan file type at %s", path);
     };
-
 }
 
 Janet ref_scan(int argc, Janet *argv) {
     janet_fixarity(argc, 3);
     JanetString store_path = janet_getstring(argv, 0);
-    JanetString path = janet_getstring(argv, 1);
+    Pkg *pkg = janet_getabstract(argv, 1, &pkg_type);
+    if (!janet_checktype(pkg->path, JANET_STRING))
+        janet_panic("package does not have a valid path");
+    JanetString path = janet_unwrap_string(pkg->path);
     JanetTable *hashes = janet_gettable(argv, 2);
     if (janet_string_length(store_path) == 0)
         janet_panic("unable to scan for empty store path");
     ref_scan_path2(store_path, (const char *)path, janet_string_length(path), hashes, 0);
+    janet_table_put(hashes, pkg->path, janet_wrap_nil());
     return janet_wrap_table(hashes);
 }
