@@ -205,6 +205,15 @@
   (def ref-set (_hermes/ref-scan store-path pkg @{}))
   (sorted (keys ref-set)))
 
+(defn- optimistic-lock-cleanup
+  []
+  (when-let [gc-lock (flock/acquire (string store-path "/lock/gc.lock") :noblock :exclusive)]
+    (def all-locks (os/dir (string store-path "/lock")))
+    (def pkg-locks (filter |(not= $ "gc.lock") all-locks))
+    (each l pkg-locks
+      (os/rm (string store-path "/lock/" l)))
+    (:close gc-lock)))
+
 (defn build
   [pkg &opt root]
 
@@ -231,7 +240,7 @@
           (build2 dep))
         (put registry (dep :builder) '*pkg-already-built*))
 
-      (with [flock (flock/acquire (string store-path "/lock/ " (pkg :hash) ".lock") :block :exclusive)]
+      (with [flock (flock/acquire (string store-path "/lock/" (pkg :hash) ".lock") :block :exclusive)]
         # After aquiring the package lock, check again that it doesn't exist.
         # This is in case multiple builders were waiting.
         (when (not (has-pkg pkg))
@@ -283,9 +292,5 @@
         nil)
 
     (build2 pkg root)))
-    
-    (when-let [gclock (flock/acquire (string store-path "/lock/gc.lock") :noblock :exclusive)]
-      # TODO optimistic cleanup of /locks we created during build.
-      (:close gclock))
-
+    (optimistic-lock-cleanup)
     nil)
