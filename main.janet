@@ -77,6 +77,16 @@
   (hermes/build pkg out-link)
   (print (pkg :path)))
 
+(def- gc-params
+  ["Build a hermes package."])
+
+(defn- gc
+  []
+  (def parsed-args (argparse/argparse ;build-params))
+  (unless parsed-args
+    (os/exit 1))
+  (hermes/gc))
+
 (defn main
   [&]
   (def args (dyn :args))
@@ -84,5 +94,6 @@
     (match args
       [_ "init"] (init)
       [_ "build"] (build)
+      [_ "gc"] (gc)
       _ (unknown-command)))
   nil)

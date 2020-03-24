@@ -1,6 +1,7 @@
 (import sh)
 (import sqlite3)
 (import flock)
+(import jdn)
 (import _hermes)
 
 (def store-path "/tmp/hpkgs")
@@ -177,7 +178,8 @@
     (sqlite3/eval db "begin transaction;")
     (when (empty? (sqlite3/eval db "select name from sqlite_master where type='table' and name='Meta'"))
       (sqlite3/eval db "create table Roots(LinkPath text primary key);")
-      (sqlite3/eval db "create table Pkgs(Hash text primary key);")
+      (sqlite3/eval db "create table Pkgs(Hash text primary key, Path text);")
+      (sqlite3/eval db "create unique index PkgsPathIndex on Pkgs(Path);")
       (sqlite3/eval db "create table Meta(Key text primary key, Value text);")
       (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
       (sqlite3/eval db "commit;")))
@@ -205,13 +207,18 @@
   (def ref-set (_hermes/ref-scan store-path pkg @{}))
   (sorted (keys ref-set)))
 
-(defn- optimistic-lock-cleanup
+
+(defn- build-lock-cleanup
+  []
+  (def all-locks (os/dir (string store-path "/lock")))
+  (def pkg-locks (filter |(not= $ "gc.lock") all-locks))
+  (each l pkg-locks
+    (os/rm (string store-path "/lock/" l))))
+
+(defn- optimistic-build-lock-cleanup
   []
   (when-let [gc-lock (flock/acquire (string store-path "/lock/gc.lock") :noblock :exclusive)]
-    (def all-locks (os/dir (string store-path "/lock")))
-    (def pkg-locks (filter |(not= $ "gc.lock") all-locks))
-    (each l pkg-locks
-      (os/rm (string store-path "/lock/" l)))
+    (build-lock-cleanup)
     (:close gc-lock)))
 
 (defn build
@@ -279,7 +286,7 @@
 
           # Set package permissions.
           (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" (pkg :path)])
-          (sqlite3/eval db "insert into Pkgs(Hash) Values(:hash)" {:hash (pkg :hash)}))
+          (sqlite3/eval db "insert into Pkgs(Hash, Path) Values(:hash, :path)" {:hash (pkg :hash) :path (pkg :path)}))
 
         (when root
           (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
@@ -292,5 +299,66 @@
         nil)
 
     (build2 pkg root)))
-    (optimistic-lock-cleanup)
+    (optimistic-build-lock-cleanup)
     nil)
+
+(defn path-to-pkg-hash
+  [path]
+  (def tail-peg (comptime (peg/compile ~{
+    :hash (capture (repeat 40 (choice (range "09") (range "af"))))
+    :main (sequence "/pkg/"  :hash)
+  })))
+  (when (string/has-prefix? store-path path)
+    (def tail (string/slice path (length store-path)))
+    (first (peg/match tail-peg tail))))
+
+(defn gc
+  []
+  (with [flock (flock/acquire (string store-path "/lock/gc.lock") :block :exclusive)]
+  (with [db (sqlite3/open (string store-path "/hermes.db"))]
+
+    (def work-q @[])
+    (def visited @{})
+
+    (defn process-roots
+      []
+      (def dead-roots @[])
+      (def roots (map |($ "LinkPath") (sqlite3/eval db "select * from roots")))
+      (each root roots
+        (if-let [rstat (os/lstat root)
+                 is-link (= :link (rstat :mode))]
+          (array/push work-q (path-to-pkg-hash (os/readlink root)))
+          (array/push dead-roots root)))
+      (sqlite3/eval db "begin transaction;")
+      (each root dead-roots
+        (sqlite3/eval db "delete from Roots where LinkPath = :root;" {:root root}))
+      (sqlite3/eval db "commit;"))
+
+    (defn gc-walk []
+      (unless (empty? work-q)
+        (def hash (array/pop work-q))
+        (if (visited hash)
+          (gc-walk)
+          (do
+            (put visited hash true)
+            (when-let [row (first (sqlite3/eval db "select Path from Pkgs where Hash = :hash;" {:hash hash}))
+                       pkg-dir (row "Path")]
+              (def pkg-info (jdn/decode-one (slurp (string pkg-dir "/.hpkg.jdn"))))
+              (array/concat work-q (pkg-info :scanned-refs))
+              (gc-walk))))))
+    
+    (process-roots)
+    (gc-walk)
+
+    (each pkg-name (os/dir (string store-path "/pkg/"))
+      (def pkg-dir (string store-path "/pkg/" pkg-name))
+      (def pkg-hash (path-to-pkg-hash pkg-dir))
+      (unless (visited hash)
+        (eprintf "deleting %s" pkg-dir)
+        (sqlite3/eval db "delete from Pkgs where Hash = :hash" {:hash pkg-hash})
+        (sh/$ ["chmod" "-R" "u+w" pkg-dir])
+        (sh/$ ["rm" "-rf" pkg-dir])))
+
+    (build-lock-cleanup)
+
+    nil)))
