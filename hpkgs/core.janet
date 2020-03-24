@@ -44,6 +44,11 @@
       (sh/$ ["make"])
       (sh/$ ["make" "install"]))))
 
+(defmacro defsrc
+  [name &keys {:url url :hash hash}]
+  (def src-pkg (gensym))
+ ~(def ,name (,make-src-pkg :url ,url :hash ,hash)))
+
 (defmacro defpkg
   [name &keys {:src-url src-url :src-hash src-hash}]
   (def src-pkg (gensym))
@@ -174,3 +179,35 @@
         lzip
         xz
       ]))
+
+(defsrc gcc-src
+  :url "https://ftp.gnu.org/gnu/gcc/gcc-8.3.0/gcc-8.3.0.tar.xz"
+  :hash "sha256:809be66cb398562d2f71c4d770cbf8df0b32d715f80113d630e8bd108fb62c9e")
+
+(defsrc musl-cross-make-src
+  :url "https://github.com/richfelker/musl-cross-make/archive/v0.9.8.tar.gz"
+  :hash "sha256:84e9d1a141eee17b96e916a213eec7e5efede2933af35cb54b33aaf0f27d40d9")
+
+(defsrc linux-hdrs-src
+  :url "https://mirrors.edge.kernel.org/pub/linux/kernel/v4.x/linux-4.4.10.tar.xz"
+  :hash "sha256:73e62a8ac190a8d76a6a48b19ca12179df927813a767bbc3a313bb544884abf1")
+
+(defsrc binutils-src
+  :url "https://ftp.gnu.org/gnu/binutils/binutils-2.32.tar.xz"
+  :hash "sha256:a54bde22c5c478ac97a5ade4fd16f5c7fd25e9e96192b9f01e249294541f7fd2")
+
+(defsrc gmp-src
+  :url "https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz"
+  :hash "sha256:8bf2479e015f0a353b9a90ffd323ace20083919957ac0e154adc49f9d37b70e9")
+
+(defsrc mpc-src
+  :url "https://ftp.gnu.org/gnu/mpc/mpc-1.1.0.tar.gz"
+  :hash "sha256:8dcdaea72d8e107c75dda72c215664f07e1da6c648da2f0c9dc41903c9a745a5")
+
+(defsrc mpfr-src
+  :url "https://www.mpfr.org/mpfr-current/mpfr-4.0.2.tar.xz"
+  :hash "sha256:26017838b1944df12aba805873901cc3f82cab43485d90282379520e8a58be86")
+
+(defsrc musl-src
+  :url "https://www.musl-libc.org/releases/musl-1.1.23.tar.gz"
+  :hash "sha256:8afed31eeaefed62881267f97c7d021037e0e9aa79ff4c2bb9d0c8fc260f6209")
