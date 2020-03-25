@@ -15,10 +15,12 @@
         (os/link "./x86_64-linux-musl-cc" "cc")
         (os/link "./x86_64-linux-musl-c++" "c++"))))
 
-(defn make-src-pkg
-  [&keys {:url url :hash hash :fname fname}]
+(defn- make-src-pkg
+  [&keys {:name name :url url :hash hash :fname fname}]
   (default fname (last (string/split "/" url))) # XXX rfind would be nice in stdlib.
   (pkg
+    :name
+      name
     :out-hash
       hash
     :builder
@@ -26,9 +28,10 @@
         (fetch url (string (dyn :pkg-out) "/" fname)))
     ))
 
-(defn make-core-pkg
-  [&keys {:src src}]
+(defn- make-core-pkg
+  [&keys {:name name :src src}]
   (pkg
+    :name name
     :builder
     (fn []
       (os/setenv "PATH" (string (bootstrap :path) "/bin"))
@@ -47,15 +50,16 @@
 (defmacro defsrc
   [name &keys {:url url :hash hash}]
   (def src-pkg (gensym))
- ~(def ,name (,make-src-pkg :url ,url :hash ,hash)))
+ ~(def ,name (,make-src-pkg :name ,(string name) :url ,url :hash ,hash)))
 
 (defmacro defpkg
   [name &keys {:src-url src-url :src-hash src-hash}]
   (def src-pkg (gensym))
- ~(def [,name ,(symbol name '-src)]
+  (def src-name (symbol name '-src))
+ ~(def [,name ,src-name]
     (do
-      (def ,src-pkg (,make-src-pkg :url ,src-url :hash ,src-hash))
-      [(,make-core-pkg :src ,src-pkg) ,src-pkg])))
+      (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
+      [(,make-core-pkg :name ,(string name) :src ,src-pkg) ,src-pkg])))
 
 (defpkg coreutils
   :src-url

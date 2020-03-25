@@ -105,7 +105,7 @@ static void finalize_dir (void *p) {
     if (*d) closedir(*d);
 }
 
-void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, JanetTable *hashes, int rec) {
+void hash_scan_path2(JanetString store_path, const char *path, size_t path_len, JanetTable *hashes, int rec) {
     struct stat statbuf;
 
     if (rec > 1000)
@@ -158,7 +158,7 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
             int npath = snprintf(NULL, 0, "%s/%s", path, de->d_name) + 1;
             char *child_path = janet_smalloc(npath+1);
             snprintf(child_path, npath+1, "%s/%s", path, de->d_name);
-            ref_scan_path2(store_path, child_path, npath+1, hashes, rec+1);
+            hash_scan_path2(store_path, child_path, npath+1, hashes, rec+1);
             janet_sfree(child_path);
         }
         janet_sfree(dr);
@@ -167,7 +167,7 @@ void ref_scan_path2(JanetString store_path, const char *path, size_t path_len, J
     };
 }
 
-Janet ref_scan(int argc, Janet *argv) {
+Janet hash_scan(int argc, Janet *argv) {
     janet_fixarity(argc, 3);
     JanetString store_path = janet_getstring(argv, 0);
     Pkg *pkg = janet_getabstract(argv, 1, &pkg_type);
@@ -177,7 +177,7 @@ Janet ref_scan(int argc, Janet *argv) {
     JanetTable *hashes = janet_gettable(argv, 2);
     if (janet_string_length(store_path) == 0)
         janet_panic("unable to scan for empty store path");
-    ref_scan_path2(store_path, (const char *)path, janet_string_length(path), hashes, 0);
+    hash_scan_path2(store_path, (const char *)path, janet_string_length(path), hashes, 0);
     janet_table_put(hashes, pkg->path, janet_wrap_nil());
     return janet_wrap_table(hashes);
 }

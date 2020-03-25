@@ -13,4 +13,8 @@
   :name "_hermes"
   :cflags ["-g"]
   :headers ["hermes.h" "sha1.h"]
-  :source ["hermes.c" "util.c" "sha1.c" "pkghash.c" "deps.c" "refscan.c"])
+  :source ["hermes.c" "util.c" "sha1.c" "pkghash.c" "deps.c" "hashscan.c"])
+
+#(declare-executable
+# :name "hermes"
+# :entry "main.janet")

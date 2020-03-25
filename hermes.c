@@ -34,12 +34,26 @@ static int pkg_get(void *ptr, Janet key, Janet *out) {
     }
 }
 
-static void validate_pkg_types(Pkg *pkg) {
+static void validate_pkg(Pkg *pkg) {
     if (!janet_checktypes(pkg->builder, JANET_TFLAG_NIL|JANET_TFLAG_FUNCTION))
         janet_panicf("builder must be a function or nil, got %v", pkg->builder);
 
     if (!janet_checktypes(pkg->name, JANET_TFLAG_NIL|JANET_TFLAG_STRING))
         janet_panicf("name must be a string or nil, got %v", pkg->name);
+
+    if janet_checktype(pkg->name, JANET_STRING) {
+        JanetString name = janet_unwrap_string(pkg->name);
+        size_t name_len = janet_string_length(name);
+        if (name_len > 64) {
+            janet_panicf("name %v is too long, must be less than 64 chars", pkg->name);
+        }
+
+        for (int i = 0; i < name_len; i++) {
+            if (name[i] == '/') {
+                janet_panicf("name %v contains path separator.", pkg->name);
+            }
+        }
+    }
 
     if (!janet_checktypes(pkg->out_hash, JANET_TFLAG_NIL|JANET_TFLAG_STRING))
         janet_panicf("out-hash must be a string or nil, got %v", pkg->out_hash);
@@ -68,7 +82,7 @@ static void* pkg_unmarshal(JanetMarshalContext *ctx) {
     pkg->out_hash = janet_unmarshal_janet(ctx);
     pkg->hash = janet_unmarshal_janet(ctx);
     pkg->path = janet_unmarshal_janet(ctx);
-    validate_pkg_types(pkg);
+    validate_pkg(pkg);
     return pkg;
 }
 
@@ -84,7 +98,7 @@ static Janet pkg(int argc, Janet *argv) {
     pkg->hash = janet_wrap_nil();
     pkg->path = janet_wrap_nil();
 
-    validate_pkg_types(pkg);
+    validate_pkg(pkg);
 
     return janet_wrap_abstract(pkg);
 }
@@ -97,7 +111,7 @@ static const JanetReg cfuns[] = {
     {"pkg", pkg, NULL},
     {"pkg-hash", pkg_hash, NULL},
     {"pkg-dependencies", pkg_dependencies, NULL},
-    {"ref-scan", ref_scan, NULL},
+    {"hash-scan", hash_scan, NULL},
     {NULL, NULL, NULL}
 };
 

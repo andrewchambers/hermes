@@ -465,18 +465,33 @@ static JanetString finalize_pkg_hash_state(HashState *st) {
     return janet_string(hexbuf, sizeof(hexbuf));
 }
 
-static Janet make_pkg_path(JanetString store_path, JanetString hash) {
-    size_t prefix_sz = janet_string_length(store_path) + 5;
-    size_t ntmp = prefix_sz + janet_string_length(hash);
-    uint8_t *tmp = alloca(ntmp);
+static Janet make_pkg_path(JanetString store_path, JanetString hash, Janet name) {
+    size_t name_len = 0;
+    JanetString name_str = NULL;
 
+    if (janet_checktype(name, JANET_STRING)) {
+        name_str = janet_unwrap_string(name);
+        name_len = janet_string_length(name_str);
+    }
+
+    size_t prefix_sz = janet_string_length(store_path) + 5;
+    size_t ntmp = prefix_sz + janet_string_length(hash) + (name_str ? name_len + 1 : 0);
+    uint8_t *tmp = alloca(ntmp);
     memcpy(tmp, store_path, janet_string_length(store_path));
     memcpy(tmp + janet_string_length(store_path), "/pkg/", 5);
     uint8_t *hashout = tmp + prefix_sz;
-    memcpy(hashout, hash, janet_string_length(hash));
+    size_t hash_len = janet_string_length(hash);
+    memcpy(hashout, hash, hash_len);
+    uint8_t *nameout = hashout + hash_len;
+    if (name_str) {
+        nameout[0] = '-';
+        memcpy(nameout+1, name_str, name_len);
+    }
     return janet_stringv(tmp, ntmp);
 }
 
+// XXX Maybe this should be called 'freeze', 'finalize', or some other word.
+// Not only do we hash he package, we compute and cache it's path on disk.
 Janet pkg_hash(int32_t argc, Janet *argv) {
     janet_fixarity(argc, 3);
 
@@ -500,7 +515,7 @@ Janet pkg_hash(int32_t argc, Janet *argv) {
 
     JanetString hash = finalize_pkg_hash_state(&st);
     pkg->hash = janet_wrap_string(hash);
-    pkg->path = make_pkg_path(store_path, hash);
+    pkg->path = make_pkg_path(store_path, hash, pkg->name);
 
     return pkg->hash;
 }

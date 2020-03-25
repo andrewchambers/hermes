@@ -29,9 +29,9 @@ extern const JanetAbstractType pkg_type;
 
 Janet pkg_hash(int32_t argc, Janet *argv);
 
-/* refscan.c */
+/* hashscan.c */
 
-Janet ref_scan(int32_t argc, Janet *argv);
+Janet hash_scan(int32_t argc, Janet *argv);
 
 /* deps.c */
 
