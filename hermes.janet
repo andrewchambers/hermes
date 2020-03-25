@@ -216,7 +216,7 @@
   (sort hashes)
   (each h hashes
     (when-let [row (first (sqlite3/eval db "select Name from Pkgs where Hash = :hash;" {:hash h}))]
-      (array/push refs (pkg-dir-name-from-parts h (row "Name")))))
+      (array/push refs (pkg-dir-name-from-parts h (row :Name)))))
   refs)
 
 (defn- build-lock-cleanup
@@ -326,9 +326,9 @@
   [path]
   (def tail-peg (comptime (peg/compile ~{
     :hash (capture (repeat 40 (choice (range "09") (range "af"))))
-    :name (choice (capture (some (sequence (not "/") 1)))
+    :name (choice (sequence "-" (capture (some (sequence (not "/") 1))))
                   (constant nil))
-    :main (sequence "/pkg/" :hash "-" :name)
+    :main (sequence "/pkg/" :hash :name)
   })))
   (when (string/has-prefix? store-path path)
     (def tail (string/slice path (length store-path)))
@@ -345,7 +345,7 @@
     (defn process-roots
       []
       (def dead-roots @[])
-      (def roots (map |($ "LinkPath") (sqlite3/eval db "select * from roots;")))
+      (def roots (map |($ :LinkPath) (sqlite3/eval db "select * from Roots;")))
       (each root roots
         (if-let [rstat (os/lstat root)
                  is-link (= :link (rstat :mode))
@@ -365,7 +365,7 @@
           (gc-walk)
           (do
             (put visited pkg-dir true)
-            (def pkg-info (jdn/decode-one (slurp (string pkg-dir "/.hpkg.jdn"))))
+            (def pkg-info (jdn/decode (slurp (string pkg-dir "/.hpkg.jdn"))))
             (array/concat work-q (map |(string store-path "/pkg/" $) (pkg-info :scanned-refs)))
             (gc-walk)))))
     

@@ -1,4 +1,4 @@
-(import hermes)
+(import ./hermes)
 (import argparse)
 
 (defn- unknown-command
