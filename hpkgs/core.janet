@@ -184,34 +184,128 @@
         xz
       ]))
 
-(defsrc gcc-src
-  :url "https://ftp.gnu.org/gnu/gcc/gcc-8.3.0/gcc-8.3.0.tar.xz"
-  :hash "sha256:809be66cb398562d2f71c4d770cbf8df0b32d715f80113d630e8bd108fb62c9e")
-
 (defsrc musl-cross-make-src
-  :url "https://github.com/richfelker/musl-cross-make/archive/v0.9.8.tar.gz"
-  :hash "sha256:84e9d1a141eee17b96e916a213eec7e5efede2933af35cb54b33aaf0f27d40d9")
+  :url "https://github.com/richfelker/musl-cross-make/archive/v0.9.9.tar.gz"
+  :hash "sha256:0e2dc83f870cd48f545470bdf5acddabf296aca155705312f292fc2b22e41b88")
 
-(defsrc linux-hdrs-src
-  :url "https://mirrors.edge.kernel.org/pub/linux/kernel/v4.x/linux-4.4.10.tar.xz"
-  :hash "sha256:73e62a8ac190a8d76a6a48b19ca12179df927813a767bbc3a313bb544884abf1")
+(defsrc gcc-src
+  :url "https://ftp.gnu.org/pub/gnu/gcc/gcc-9.2.0/gcc-9.2.0.tar.xz"
+  :hash "sha256:e25f41bb630915c9a2de18e959c7f920cda202022e7c815090c519f3ce36db81")
 
 (defsrc binutils-src
-  :url "https://ftp.gnu.org/gnu/binutils/binutils-2.32.tar.xz"
-  :hash "sha256:a54bde22c5c478ac97a5ade4fd16f5c7fd25e9e96192b9f01e249294541f7fd2")
+  :url "https://ftp.gnu.org/pub/gnu/binutils/binutils-2.33.1.tar.xz"
+  :hash "sha256:f6245cf858b2a50a515e5d13d1be3e2acbf7cb5f4873baa6319d83ff3d700a7e")
 
 (defsrc gmp-src
-  :url "https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz"
-  :hash "sha256:8bf2479e015f0a353b9a90ffd323ace20083919957ac0e154adc49f9d37b70e9")
+  :url "https://ftp.gnu.org/pub/gnu/gmp/gmp-6.1.2.tar.bz2"
+  :hash "sha256:1dc7d51347da25aa183cdae34c064938c1540b4328a352c6ddef59d917499e16")
 
 (defsrc mpc-src
   :url "https://ftp.gnu.org/gnu/mpc/mpc-1.1.0.tar.gz"
   :hash "sha256:8dcdaea72d8e107c75dda72c215664f07e1da6c648da2f0c9dc41903c9a745a5")
 
 (defsrc mpfr-src
-  :url "https://www.mpfr.org/mpfr-current/mpfr-4.0.2.tar.xz"
-  :hash "sha256:26017838b1944df12aba805873901cc3f82cab43485d90282379520e8a58be86")
+  :url "https://ftp.gnu.org/pub/gnu/mpfr/mpfr-4.0.2.tar.bz2"
+  :hash "sha256:1a962881aeac34c637ae68946b8795b81f059e80e986c9955db8bc33f6d9b901")
 
 (defsrc musl-src
-  :url "https://www.musl-libc.org/releases/musl-1.1.23.tar.gz"
-  :hash "sha256:8afed31eeaefed62881267f97c7d021037e0e9aa79ff4c2bb9d0c8fc260f6209")
+  :url "https://www.musl-libc.org/releases/musl-1.2.0.tar.gz"
+  :hash "sha256:13c4b5a3b00f7e097ab4c8f06772785f5408b7f65fcb76cf1e12aa79fd84f33b")
+
+(defsrc linux-hdrs-src
+  :url "http://ftp.barfooze.de/pub/sabotage/tarballs//linux-headers-4.19.88.tar.xz"
+  :hash "sha256:741546ea9581dce73534d3ca8445e5243aa21b7b01d22d82019b459a34fbc160")
+
+# XXX Why does musl cross make download this?
+(def- config.sub
+  (pkg
+    :out-hash "sha256:df2fda02b714aa5815f2107a9b6d0af508aa51df59e84bab29fcdd672bf9ede9"
+    :builder
+    (fn []
+      (fetch
+        "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
+        (string (dyn :pkg-out) "/" "config.sub")))))
+
+
+(defn- install-musl-cross-make-gcc
+  [post-extract post-install]
+  (defn archive-path
+        [src-pkg]
+        (->> (src-pkg :path)
+          (os/dir)
+          (filter |(not (string/has-prefix? "." $)))
+          (first)
+          (string (src-pkg :path) "/")))
+
+  (os/setenv "PATH"
+    (string
+      (patch :path) "/bin:" # XXX busybox patch cannot apply these patches.
+      (bootstrap :path) "/bin"))
+  
+  (unpack (archive-path musl-cross-make-src) :strip 1)
+
+  (os/mkdir "sources")
+  (each src [gcc-src binutils-src musl-src gmp-src mpc-src mpfr-src linux-hdrs-src]
+    (sh/$ ["cp" (archive-path src) "./sources"]))
+  (sh/$ ["cp" (string (config.sub :path) "/config.sub") "./sources"])
+  
+  (spit "config.mak"
+    (string
+      "TARGET=x86_64-linux-musl\n"
+      "OUTPUT=" (dyn :pkg-out) "\n"
+      "COMMON_CONFIG += CC=\"cc -static --static\" CXX=\"c++ -static --static\"\n"
+      "COMMON_CONFIG += CFLAGS=\"-g0 -Os\" CXXFLAGS=\"-g0 -Os\" LDFLAGS=\"-s\"\n"
+      "DL_CMD=false\n"
+      "COWPATCH=" (os/cwd) "/cowpatch.sh\n"))
+
+  (sh/$ ["make" "extract_all"])
+  (when post-extract
+    (post-extract))
+  (sh/$ ["make" "install" "-j32"])
+  (when post-install
+    (post-install)))
+
+# The runtime package is a gcc installation with only 
+(def gcc-runtime
+  (pkg
+    :name "rt"
+    :builder
+    (fn []
+      (defn do-fixups
+        []
+        # Remove things that aren't dynamic libs.
+        (sh/$ ["find" (dyn :pkg-out) "-type" "f" "-not" "-name" "*.so*" "-delete"])
+        
+        # XXX Fix broken link, why is this broken?
+        (def ld.so (string (dyn :pkg-out) "/x86_64-linux-musl/lib/ld-musl-x86_64.so.1"))
+        (os/rm ld.so)
+        (os/link "libc.so" ld.so true)
+        
+        # Manually configure path with musl config.
+        (os/mkdir (string (dyn :pkg-out) "/x86_64-linux-musl/etc"))
+        (spit 
+          (string (dyn :pkg-out) "/x86_64-linux-musl/etc/ld-musl-x86_64.path")
+          (string (dyn :pkg-out) "/x86_64-linux-musl/lib\n"))
+        #XXX TODO DELETE empty dirs
+        )
+      (install-musl-cross-make-gcc
+        nil
+        do-fixups))))
+
+(def gcc
+  (pkg
+    :name "gcc"
+    :builder
+    (fn []
+      (defn do-patch
+        []
+        (def cfg "gcc-9.2.0/gcc/config/i386/linux64.h")
+        (spit cfg 
+          (string/replace-all
+            "/lib/ld-musl-x86_64.so.1"
+            (string (gcc-runtime :path) "/x86_64-linux-musl/lib/ld-musl-x86_64.so.1")
+            (slurp cfg))))
+      (install-musl-cross-make-gcc
+        do-patch
+        nil))))
+
