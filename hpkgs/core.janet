@@ -2,15 +2,17 @@
 (def bootstrap
   (pkg
     :out-hash
-      "sha256:f11c73f3b0c4a5939f2d67f4a2b401a7938ddc7d8c7c3515b4c53efdf03cc0ce"
+      "sha256:1ff24b1525daaf672d430516454bd429d157a14c8b479b2f84243eb014962921"
     :builder
       (fn []
         (unpack
           (fetch
-            "https://github.com/andrewchambers/hpkgs-seeds/raw/v0.0.1/linux-x86_64-seed.tar.gz")
+            # TODO FIXME make this a tag.
+            "https://github.com/andrewchambers/hermes-seeds/raw/master/bootstrap.tar.gz")
             :dest (dyn :pkg-out))
-        # XXX We should include these in the tarball once self hosting.
+         # XXX We should include these in the tarball once self hosting.
         (os/cd (string (dyn :pkg-out) "/bin"))
+        (os/link "./dash" "sh")
         (os/link "./x86_64-linux-musl-ar" "ar")
         (os/link "./x86_64-linux-musl-cc" "cc")
         (os/link "./x86_64-linux-musl-c++" "c++"))))
@@ -41,9 +43,10 @@
                             (filter |(not (string/has-prefix? "." $)))
                             (first)))
       (unpack (string (src :path) "/"  src-archive) :strip 1)
-      (os/setenv "CC" "x86_64-linux-musl-cc")
-      (os/setenv "LDFLAGS" "-O2 -static")
-      (sh/$ ["sh" "./configure" "--prefix" (dyn :pkg-out)])
+      (os/setenv "CC" "x86_64-linux-musl-cc --static")
+      (os/setenv "CFLAGS" "-O2")
+      (os/setenv "LDFLAGS" "--static")
+      (sh/$ ["sh" "./configure" "--enable-shared=no" "--prefix" (dyn :pkg-out)])
       (sh/$ ["make"])
       (sh/$ ["make" "install"]))))
 
@@ -60,6 +63,12 @@
     (do
       (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
       [(,make-core-pkg :name ,(string name) :src ,src-pkg) ,src-pkg])))
+
+(defpkg dash
+  :src-url
+    "http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.10.tar.gz"
+  :src-hash
+    "sha256:4273c06551b2c1f281c9ca92e69e8bb01783fdbf8eef85a630640c63043732bf")
 
 (defpkg coreutils
   :src-url
@@ -81,9 +90,9 @@
 
 (defpkg findutils
   :src-url
-    "https://ftp.gnu.org/pub/gnu/findutils/findutils-4.6.0.tar.gz"
+    "https://ftp.gnu.org/pub/gnu/findutils/findutils-4.7.0.tar.xz"
   :src-hash
-    "sha256:82c42eac63c20ab10c3dd4b6040fc562c9070460214b0151b114780a96c75398")
+    "sha256:5e22d995f9f378bad17538fccde3cc67df618aac937f3ef1b51fb2ff37137e60")
 
 (defpkg make
   :src-url
@@ -133,6 +142,30 @@
   :src-hash
     "sha256:088d9a30007446dd85f7efe27403d82177b384713448fb575aa47cb70ff3ba6a")
 
+(defsrc bzip2-src
+  :url
+    "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+  :hash
+    "sha256:e1b3c10021d1e662e1125ead2fdb29fd21d5c7da9579b9d59a254bafd3281a44")
+
+(def bzip2
+  (pkg
+    :name "bzip2"
+    :builder
+    (fn []
+      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
+      # XXX we shouldn't need to do this at build time.
+      (def src-archive (->> (bzip2-src :path)
+                            (os/dir)
+                            (filter |(not (string/has-prefix? "." $)))
+                            (first)))
+      (unpack (string (bzip2-src :path) "/"  src-archive) :strip 1)
+      (sh/$ ["make" "install"
+               "CC=x86_64-linux-musl-cc --static"
+               "CFLAGS=-O2"
+               "LDFLAGS=--static"
+               (string "PREFIX=" (dyn :pkg-out))]))))
+
 (defpkg lzip
   :src-url
     "http://download.savannah.gnu.org/releases/lzip/lzip-1.21.tar.gz"
@@ -141,9 +174,9 @@
 
 (defpkg xz
   :src-url
-    "https://ftp.gnu.org/gnu/which/which-2.21.tar.gz"
+    "https://tukaani.org/xz/xz-5.2.4.tar.gz"
   :src-hash
-    "sha256:81707303a5b68562ef242036d6e697f3a5539679cc6cda1191ac1c3014d09ec4")
+    "sha256:e0639989aa21a9487908d106a44065372a8e371e35d1d5fb51b1ec9d5008438b")
 
 (defn make-combined-env
   [&keys {:name name
@@ -169,6 +202,7 @@
       "core-env"
     :bin-pkgs
       [
+        dash
         coreutils
         awk
         diffutils
@@ -261,7 +295,7 @@
   (sh/$ ["make" "extract_all"])
   (when post-extract
     (post-extract))
-  (sh/$ ["make" "install" "-j32"])
+  (sh/$ ["make" "install" "-j8"])
   (when post-install
     (post-install)))
 
@@ -308,4 +342,40 @@
       (install-musl-cross-make-gcc
         do-patch
         nil))))
+
+
+(def bootstrap-out
+  (pkg
+    :name "bootstrap-out"
+    :builder
+    (fn []
+      
+      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
+
+      (defn copy-bin
+        [pkg]
+        (def out-bin-dir (string (dyn :pkg-out) "/bin"))
+        (os/mkdir out-bin-dir)
+        (sh/$ ["cp" "-rT" (string (pkg :path) "/bin") out-bin-dir]))
+
+      (copy-bin dash)
+      (copy-bin awk)
+      (copy-bin coreutils)
+      (copy-bin diffutils)
+      (copy-bin findutils)
+      (copy-bin patch)
+      (copy-bin make)
+      (copy-bin tar)
+      (copy-bin gzip)
+      (copy-bin bzip2)
+      (copy-bin xz)
+      (copy-bin grep)
+      (copy-bin sed)
+
+      (install-musl-cross-make-gcc
+        nil
+        nil)
+
+      (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./bootstrap.tar.gz" "."])
+      (sh/$ ["mv" "./bootstrap.tar.gz" (dyn :pkg-out)]))))
 
