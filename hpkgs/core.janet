@@ -2,20 +2,14 @@
 (def bootstrap
   (pkg
     :out-hash
-      "sha256:1ff24b1525daaf672d430516454bd429d157a14c8b479b2f84243eb014962921"
+      "sha256:f6c56e84b78b7d1d57aa9c127b23b9fd5c729410b4ecad9012b0de5ab55649bd"
     :builder
       (fn []
         (unpack
           (fetch
             # TODO FIXME make this a tag.
             "https://github.com/andrewchambers/hermes-seeds/raw/master/bootstrap.tar.gz")
-            :dest (dyn :pkg-out))
-         # XXX We should include these in the tarball once self hosting.
-        (os/cd (string (dyn :pkg-out) "/bin"))
-        (os/link "./dash" "sh")
-        (os/link "./x86_64-linux-musl-ar" "ar")
-        (os/link "./x86_64-linux-musl-cc" "cc")
-        (os/link "./x86_64-linux-musl-c++" "c++"))))
+            :dest (dyn :pkg-out)))))
 
 (defn- make-src-pkg
   [&keys {:name name :url url :hash hash :fname fname}]
@@ -180,7 +174,8 @@
 
 (defn make-combined-env
   [&keys {:name name
-          :bin-pkgs bin-pkgs }]
+          :bin-pkgs bin-pkgs
+          :post-build post-build}]
   (default bin-pkgs [])
   (pkg
     :name name
@@ -194,7 +189,9 @@
             (string (sh/$$_ ["readlink" "-f" (string pkg-bin-dir "/" bin)])))
           (def to (string (dyn :pkg-out) "/bin/" bin))
           (unless (os/stat to)
-            (os/link from to true)))))))
+            (os/symlink from to))))
+      (when post-build
+        (post-build)))))
 
 (def core-env
   (make-combined-env
@@ -207,7 +204,6 @@
         awk
         diffutils
         findutils
-        make
         patch
         sed
         grep
@@ -216,7 +212,11 @@
         gzip
         lzip
         xz
-      ]))
+      ]
+    :post-build
+    (fn []
+      (os/cd (string (dyn :pkg-out) "/bin"))
+      (os/symlink "./dash" "sh"))))
 
 (defsrc musl-cross-make-src
   :url "https://github.com/richfelker/musl-cross-make/archive/v0.9.9.tar.gz"
@@ -313,7 +313,7 @@
         # XXX Fix broken link, why is this broken?
         (def ld.so (string (dyn :pkg-out) "/x86_64-linux-musl/lib/ld-musl-x86_64.so.1"))
         (os/rm ld.so)
-        (os/link "libc.so" ld.so true)
+        (os/symlink "libc.so" ld.so)
         
         # Manually configure path with musl config.
         (os/mkdir (string (dyn :pkg-out) "/x86_64-linux-musl/etc"))
@@ -343,6 +343,29 @@
         do-patch
         nil))))
 
+
+(def core-build-env
+  (make-combined-env
+    :name
+      "core-build-env"
+    :bin-pkgs
+      [
+        core-env
+        gcc
+        pkgconf
+        make
+      ]
+    :post-build
+      (fn []
+        (os/cd (string (dyn :pkg-out) "/bin"))
+        # This could probably be a loop.
+        (os/symlink "./x86_64-linux-musl-ar" "ar")
+        (os/symlink "./x86_64-linux-musl-ar" "ranlib")
+        (os/symlink "./x86_64-linux-musl-cc" "cc")
+        (os/symlink "./x86_64-linux-musl-cc" "gcc")
+        (os/symlink "./x86_64-linux-musl-c++" "c++")
+        (os/symlink "./x86_64-linux-musl-c++" "g++")
+        (os/symlink "./x86_64-linux-musl-ld" "ld"))))
 
 (def bootstrap-out
   (pkg
@@ -375,6 +398,14 @@
       (install-musl-cross-make-gcc
         nil
         nil)
+
+      (def start-dir (os/cwd))
+      (os/cd (string (dyn :pkg-out) "/bin"))
+      (os/symlink "./dash" "sh")
+      (os/symlink "./x86_64-linux-musl-ar" "ar")
+      (os/symlink "./x86_64-linux-musl-cc" "cc")
+      (os/symlink "./x86_64-linux-musl-c++" "c++")
+      (os/cd start-dir)
 
       (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./bootstrap.tar.gz" "."])
       (sh/$ ["mv" "./bootstrap.tar.gz" (dyn :pkg-out)]))))
