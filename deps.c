@@ -88,8 +88,8 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
         }
         /* fallthrough */
     }
-  }
-  janet_panicf("cannot extract package dependencies from %v", v);
+    }
+    janet_panicf("cannot extract package dependencies from %v", v);
 }
 
 Janet pkg_dependencies(int argc, Janet *argv) {

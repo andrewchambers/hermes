@@ -24,7 +24,7 @@
         (fetch url (string (dyn :pkg-out) "/" fname)))
     ))
 
-(defn- make-core-pkg
+(defn- core-pkg
   [&keys {:name name :src src}]
   (pkg
     :name name
@@ -49,88 +49,88 @@
   (def src-pkg (gensym))
  ~(def ,name (,make-src-pkg :name ,(string name) :url ,url :hash ,hash)))
 
-(defmacro defpkg
+(defmacro defcore
   [name &keys {:src-url src-url :src-hash src-hash}]
   (def src-pkg (gensym))
   (def src-name (symbol name '-src))
  ~(def [,name ,src-name]
     (do
       (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
-      [(,make-core-pkg :name ,(string name) :src ,src-pkg) ,src-pkg])))
+      [(,core-pkg :name ,(string name) :src ,src-pkg) ,src-pkg])))
 
-(defpkg dash
+(defcore dash
   :src-url
     "http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.10.tar.gz"
   :src-hash
     "sha256:4273c06551b2c1f281c9ca92e69e8bb01783fdbf8eef85a630640c63043732bf")
 
-(defpkg coreutils
+(defcore coreutils
   :src-url
     "https://ftp.gnu.org/gnu/coreutils/coreutils-8.31.tar.xz"
   :src-hash
     "sha256:b812a9a95a7de00367309940f39cf822c5b5e749b18e78fa045694872828a146")
 
-(defpkg awk
+(defcore awk
   :src-url
     "https://ftp.gnu.org/gnu/gawk/gawk-5.0.1.tar.xz"
   :src-hash
     "sha256:614c7af2bc8bf801bc0e7db1f15866b0b445bb10e38b920d234d7e858d0f220b")
 
-(defpkg diffutils
+(defcore diffutils
   :src-url
     "https://ftp.gnu.org/gnu/diffutils/diffutils-3.7.tar.xz"
   :src-hash
     "sha256:8ff1882ea86b38be2f28dc335152bb5678af4f3187ae4cc436ea88a5b2807fb3")
 
-(defpkg findutils
+(defcore findutils
   :src-url
     "https://ftp.gnu.org/pub/gnu/findutils/findutils-4.7.0.tar.xz"
   :src-hash
     "sha256:5e22d995f9f378bad17538fccde3cc67df618aac937f3ef1b51fb2ff37137e60")
 
-(defpkg make
+(defcore make
   :src-url
     "https://ftp.gnu.org/gnu/make/make-4.2.tar.gz"
   :src-hash
     "sha256:929b96ab4083fb3efee19ad2e9e6faaa53828a28e8f2282306228c527b6bbd7a")
 
-(defpkg patch
+(defcore patch
   :src-url
     "https://ftp.gnu.org/gnu/patch/patch-2.7.tar.gz"
   :src-hash
     "sha256:f88b9f95bd536910329bf8b9dce3f066ec4ca9fe61217e1caf882c4673cc8d8e")
 
-(defpkg pkgconf
+(defcore pkgconf
   :src-url
     "https://distfiles.dereferenced.org/pkgconf/pkgconf-1.6.3.tar.xz"
   :src-hash
     "sha256:ae9fd87179b6e1adbd90cf4f484eb62922e7798f460260da51bbd7e0a4735cb5")
 
-(defpkg sed
+(defcore sed
   :src-url
     "https://ftp.gnu.org/gnu/sed/sed-4.7.tar.xz"
   :src-hash
     "sha256:04a30573b1375d4b80412fd686abf46e78d92eb29667589e0f6e72091fc08ea2")
 
-(defpkg grep
+(defcore grep
   :src-url
     "https://ftp.gnu.org/gnu/grep/grep-3.3.tar.xz"
   :src-hash
     "sha256:bc8e712d9a11f110c675c2f3959cd3781808ee10b13c13c9f10bebaa3e9de389")
 
-(defpkg which
+(defcore which
   :src-url
     "https://ftp.gnu.org/gnu/which/which-2.21.tar.gz"
   :src-hash
     "sha256:81707303a5b68562ef242036d6e697f3a5539679cc6cda1191ac1c3014d09ec4")
 
-(defpkg tar
+(defcore tar
   :src-url
     "https://ftp.gnu.org/gnu/tar/tar-1.32.tar.gz"
   :src-hash
     "sha256:ff3e8ef8b959813f3c3c10b993c2b8f4c18974ed85b2e418dc67c386f91e0be0")
 
-(defpkg gzip
+(defcore gzip
   :src-url
     "https://ftp.gnu.org/gnu/gzip/gzip-1.10.tar.gz"
   :src-hash
@@ -160,13 +160,13 @@
                "LDFLAGS=--static"
                (string "PREFIX=" (dyn :pkg-out))]))))
 
-(defpkg lzip
+(defcore lzip
   :src-url
     "http://download.savannah.gnu.org/releases/lzip/lzip-1.21.tar.gz"
   :src-hash
     "sha256:0d2d0f197a444d6d3a9edac84e2c4536e29d44111233c0c268185c2aee42971b")
 
-(defpkg xz
+(defcore xz
   :src-url
     "https://tukaani.org/xz/xz-5.2.4.tar.gz"
   :src-hash
@@ -410,3 +410,73 @@
       (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./bootstrap.tar.gz" "."])
       (sh/$ ["mv" "./bootstrap.tar.gz" (dyn :pkg-out)]))))
 
+(defn std-pkg
+  [&keys {
+    :name name
+    :src src
+    :bin-inputs bin-inputs
+    :unpack-phase unpack-phase    
+    :configure-phase configure-phase
+    :install-phase install-phase
+  }]
+
+  (default bin-inputs [])
+  
+  (default unpack-phase
+    (fn std-unpack-phase []
+      (def src (dyn :pkg-src))
+      (def src-archive (->> (src :path)
+                            (os/dir)
+                            (filter |(not (string/has-prefix? "." $)))
+                            (first)))
+      (unpack (string (src :path) "/"  src-archive) :strip 1)))
+
+  (default configure-phase
+    (fn std-configure-phase []
+      (when (os/stat "./configure")
+        (sh/$ ["./configure" "--prefix" (dyn :pkg-out)]))))
+
+  (default install-phase
+    (fn std-install-phase []
+      (sh/$ ["make"])
+      (sh/$ ["make" "install" (string "PREFIX=" (dyn :pkg-out))])))
+
+  (pkg
+    :name name
+    :builder
+    (fn std-builder []
+      (def all-bin-inputs (array/concat @[] bin-inputs [core-build-env]))
+      (os/setenv "PATH"
+        (string/join (map |(string ($ :path) "/bin") all-bin-inputs) ":"))
+      (with-dyns [:pkg-src src]
+        (unpack-phase))
+      (configure-phase)
+      (install-phase))))
+
+(defmacro defpkg
+  [name &keys {
+    :src-url src-url
+    :src-hash src-hash
+    :bin-inputs bin-inputs
+    :unpack-phase unpack-phase    
+    :configure-phase configure-phase
+    :install-phase install-phase
+  }]
+  (def src-pkg (gensym))
+  (def src-name (symbol name '-src))
+ ~(def [,name ,src-name]
+    (do
+      (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
+      [
+        (,std-pkg
+          :name ,(string name)
+          :src ,src-pkg
+          :bin-inputs ,bin-inputs
+          :unpack-phase ,unpack-phase    
+          :configure-phase ,configure-phase
+          :install-phase ,install-phase)
+      ,src-pkg])))
+
+(defpkg janet
+  :src-url "https://github.com/janet-lang/janet/archive/v1.7.0.tar.gz"
+  :src-hash "sha256:f48f2b1fd90fe347e356bf50339d6917cc12c61eb8dfe76d41a1b58b4e992c1f")
