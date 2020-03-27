@@ -2,7 +2,7 @@
 (import sqlite3)
 (import flock)
 (import jdn)
-(import _hermes)
+(import ./build/_hermes :as _hermes)
 
 (def store-path "/tmp/hpkgs")
 

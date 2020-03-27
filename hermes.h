@@ -55,11 +55,6 @@ Janet pkg_dependencies(int argc, Janet *argv);
 #define scratch_v__maybegrow(v, n) (scratch_v__needgrow((v), (n)) ? scratch_v__grow((v), (n)) : 0)
 #define scratch_v__grow(v, n)      ((v) = scratch_v_grow((v), (n), sizeof(*(v))))
 
-static void safe_memcpy(void *dest, const void *src, size_t len) {
-    if (!len) return;
-    memcpy(dest, src, len);
-}
-
 void *scratch_v_grow(void *v, int32_t increment, int32_t itemsize);
 void *scratch_v_flattenmem(void *v, int32_t itemsize);
 

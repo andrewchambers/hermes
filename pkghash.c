@@ -20,6 +20,7 @@
 * IN THE SOFTWARE.
 */
 
+#include <alloca.h>
 #include <janet.h>
 #include "hermes.h"
 
@@ -76,24 +77,6 @@ static void pushbyte(HashState *st, uint8_t b) {
 
 static void pushbytes(HashState *st, const uint8_t *bytes, int32_t len) {
     sha1_update(&st->sha1_ctx, (char*)bytes, len);
-}
-
-/* Marshal a size_t onto the buffer */
-static void push64(HashState *st, uint64_t x) {
-    if (x <= 0xF0) {
-        /* Single byte */
-        pushbyte(st, (uint8_t) x);
-    } else {
-        /* Multibyte, little endian */
-        uint8_t bytes[9];
-        int nbytes = 0;
-        while (x) {
-            bytes[++nbytes] = x & 0xFF;
-            x >>= 8;
-        }
-        bytes[0] = 0xF0 + nbytes;
-        pushbytes(st, bytes, nbytes + 1);
-    }
 }
 
 /* Forward declaration to enable mutual recursion. */

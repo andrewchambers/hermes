@@ -25,7 +25,7 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
     case JANET_KEYWORD:
     case JANET_SYMBOL:
     case JANET_CFUNCTION:
-        break;
+        return;
     case JANET_TABLE:
     case JANET_STRUCT: {
         janet_table_put(seen, v, janet_wrap_boolean(1));
@@ -37,7 +37,7 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
             pkg_dependencies2(deps, seen, kv->key);
             pkg_dependencies2(deps, seen, kv->value);
         }
-        break;
+        return;
     }
     case JANET_ARRAY:
     case JANET_TUPLE: {
@@ -48,7 +48,7 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
         for (int32_t i = 0; i < len; i++) {
             pkg_dependencies2(deps, seen, data[i]);
         }
-        break;
+        return;
     }
     case JANET_FUNCTION: {
         janet_table_put(seen, v, janet_wrap_boolean(1));
@@ -70,26 +70,26 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
         }
 
         pkg_dependencies_funcdef(deps, seen, func->def);
-        break;
+        return;
     }
     case JANET_ABSTRACT: {
         janet_table_put(seen, v, janet_wrap_boolean(1));
         if (janet_checkabstract(v, &pkg_type)) {
             janet_table_put(deps, v, janet_wrap_boolean(1));
-            break;
+            return;
         } else if (janet_checkabstract(v, &janet_peg_type)) {
             JanetPeg *peg = janet_unwrap_abstract(v);
             for (size_t i = 0; i < peg->num_constants; i++) {
                 pkg_dependencies2(deps, seen, peg->constants[i]);
             }
-            break;
+            return;
         } else if (janet_checkabstract(v, &janet_file_type)) {
-            break;
+            return;
         }
+        /* fallthrough */
     }
-    default:
-        janet_panicf("cannot extract package dependencies from %v", v);
-    }
+  }
+  janet_panicf("cannot extract package dependencies from %v", v);
 }
 
 Janet pkg_dependencies(int argc, Janet *argv) {

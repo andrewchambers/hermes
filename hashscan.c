@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include <janet.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,7 +18,7 @@ typedef struct {
     size_t store_path_len;
     JanetTable *hashes;
     size_t path_sz;
-    int n_matched;
+    size_t n_matched;
     char hash[HASH_SZ*2];
 } Scanner;
 
@@ -105,7 +106,7 @@ static void finalize_dir (void *p) {
     if (*d) closedir(*d);
 }
 
-void hash_scan_path2(JanetString store_path, const char *path, size_t path_len, JanetTable *hashes, int rec) {
+void hash_scan_path2(JanetString store_path, const char *path, JanetTable *hashes, int rec) {
     struct stat statbuf;
 
     if (rec > 1000)
@@ -158,7 +159,7 @@ void hash_scan_path2(JanetString store_path, const char *path, size_t path_len, 
             int npath = snprintf(NULL, 0, "%s/%s", path, de->d_name) + 1;
             char *child_path = janet_smalloc(npath+1);
             snprintf(child_path, npath+1, "%s/%s", path, de->d_name);
-            hash_scan_path2(store_path, child_path, npath+1, hashes, rec+1);
+            hash_scan_path2(store_path, child_path, hashes, rec+1);
             janet_sfree(child_path);
         }
         janet_sfree(dr);
@@ -177,7 +178,7 @@ Janet hash_scan(int argc, Janet *argv) {
     JanetTable *hashes = janet_gettable(argv, 2);
     if (janet_string_length(store_path) == 0)
         janet_panic("unable to scan for empty store path");
-    hash_scan_path2(store_path, (const char *)path, janet_string_length(path), hashes, 0);
+    hash_scan_path2(store_path, (const char *)path, hashes, 0);
     janet_table_put(hashes, pkg->path, janet_wrap_nil());
     return janet_wrap_table(hashes);
 }

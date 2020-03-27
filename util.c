@@ -1,6 +1,11 @@
 #include <janet.h>
 #include "hermes.h"
 
+static void safe_memcpy(void *dest, const void *src, size_t len) {
+    if (!len) return;
+    memcpy(dest, src, len);
+}
+
 /* Grow the buffer dynamically. Used for push operations. */
 void *scratch_v_grow(void *v, int32_t increment, int32_t itemsize) {
     int32_t dbl_cur = (NULL != v) ? 2 * scratch_v__cap(v) : 0;

@@ -48,7 +48,7 @@ static void validate_pkg(Pkg *pkg) {
             janet_panicf("name %v is too long, must be less than 64 chars", pkg->name);
         }
 
-        for (int i = 0; i < name_len; i++) {
+        for (size_t i = 0; i < name_len; i++) {
             if (name[i] == '/') {
                 janet_panicf("name %v contains path separator.", pkg->name);
             }
@@ -87,8 +87,6 @@ static void* pkg_unmarshal(JanetMarshalContext *ctx) {
 }
 
 static Janet pkg(int argc, Janet *argv) {
-    unsigned char hbuf[HASH_SZ];
-
     janet_fixarity(argc, 3);
 
     Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
@@ -104,7 +102,7 @@ static Janet pkg(int argc, Janet *argv) {
 }
 
 const JanetAbstractType pkg_type = {
-    "hermes/pkg", NULL, pkg_gcmark, pkg_get, NULL, pkg_marshal, pkg_unmarshal, NULL, NULL, NULL
+    "hermes/pkg", NULL, pkg_gcmark, pkg_get, NULL, pkg_marshal, pkg_unmarshal, NULL, NULL, NULL, NULL, NULL,
 };
 
 static const JanetReg cfuns[] = {
