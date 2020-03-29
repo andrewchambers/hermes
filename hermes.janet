@@ -2,9 +2,14 @@
 (import sqlite3)
 (import flock)
 (import jdn)
+(import path)
 (import ./build/_hermes :as _hermes)
 
-(def store-path "/tmp/hpkgs")
+(var- *store-path* "/hermes")
+
+(defn set-store-path
+  [store-path]
+  (set *store-path* (path/abspath store-path)))
 
 (defn assert-dir-hash
   [path expected]
@@ -90,7 +95,7 @@
 
 (defn pkg-hash
   [pkg]
-  (_hermes/pkg-hash store-path builder-registry pkg))
+  (_hermes/pkg-hash *store-path* builder-registry pkg))
 
 (defn pkg
   [&keys {
@@ -112,6 +117,16 @@
      (os/setenv k (environ k)))
   (os/cd cwd))
 
+(def pkg-loading-env (merge-into @{} root-env))
+(put pkg-loading-env 'pkg    @{:value pkg})
+(put pkg-loading-env 'fetch  @{:value fetch})
+(put pkg-loading-env 'unpack @{:value unpack})
+(put pkg-loading-env 'sh/$   @{:value sh/$})
+(put pkg-loading-env 'sh/$$  @{:value sh/$$})
+(put pkg-loading-env 'sh/$$_ @{:value sh/$$_})
+(put pkg-loading-env 'sh/$?  @{:value sh/$?})
+(def marshal-client-pkg-registry (invert (env-lookup pkg-loading-env)))
+
 (defn load-pkgs
   [fpath]
 
@@ -127,7 +142,7 @@
     a)
 
   (def saved-process-env (save-process-env))
-  (def saved-root-env (merge-into @{}))
+  (def saved-root-env (merge-into @{} root-env))
   (def saved-mod-paths (array ;module/paths))
   (def saved-mod-cache (merge-into @{} module/cache))
 
@@ -142,17 +157,9 @@
            (merge-into root-env saved-root-env)
            
            (restore-process-env saved-process-env))
-      
-    # Configure the pkg loading env.
-    # We update the root env in place so
-    # that every file has the extra builtins.
-    (put root-env 'pkg    @{:value pkg})
-    (put root-env 'fetch  @{:value fetch})
-    (put root-env 'unpack @{:value unpack})
-    (put root-env 'sh/$   @{:value sh/$})
-    (put root-env 'sh/$$  @{:value sh/$$})
-    (put root-env 'sh/$$_ @{:value sh/$$_})
-    (put root-env 'sh/$?  @{:value sh/$?})
+    
+    (clear-table root-env)
+    (merge-into root-env pkg-loading-env)
 
     # Clear module cache.
     (clear-table module/cache)
@@ -168,7 +175,7 @@
 
 (defn init-store
   [&opt path]
-  (default path store-path)
+  (default path *store-path*)
   (os/mkdir path)
   (os/mkdir (string path "/lock"))
   (spit (string path "/lock/gc.lock") "")
@@ -210,7 +217,7 @@
   [db pkg]
   # Because package names are not fixed length, the scanner can only scan for hashes. 
   # We must reconstruct the full package path by fetching from the database.
-  (def hash-set (_hermes/hash-scan store-path pkg @{}))
+  (def hash-set (_hermes/hash-scan *store-path* pkg @{}))
   (def refs @[])
   (def hashes (keys hash-set))
   (sort hashes)
@@ -221,14 +228,14 @@
 
 (defn- build-lock-cleanup
   []
-  (def all-locks (os/dir (string store-path "/lock")))
+  (def all-locks (os/dir (string *store-path* "/lock")))
   (def pkg-locks (filter |(not= $ "gc.lock") all-locks))
   (each l pkg-locks
-    (os/rm (string store-path "/lock/" l))))
+    (os/rm (string *store-path* "/lock/" l))))
 
 (defn- optimistic-build-lock-cleanup
   []
-  (when-let [gc-lock (flock/acquire (string store-path "/lock/gc.lock") :noblock :exclusive)]
+  (when-let [gc-lock (flock/acquire (string *store-path* "/lock/gc.lock") :noblock :exclusive)]
     (build-lock-cleanup)
     (:close gc-lock)))
 
@@ -239,19 +246,24 @@
 (defn build
   [pkg &opt root]
 
+  (def dep-info (compute-build-dep-info pkg))
+
   # Copy registry so we can update it as we build packages.
   (def registry (merge-into @{} builder-registry))
-  (def load-registry (invert registry))
-  (put load-registry '*pkg-already-built* (fn [&] nil))
+  
+  (each p (dep-info :order)
+    (put registry (p :builder) '*pkg-noop-build*))
 
-  (def dep-info (compute-build-dep-info pkg))
+  (def load-registry (invert registry))
+  (put load-registry '*pkg-noop-build* (fn [&] nil))
+
     
   (each p (dep-info :order)
     # Hash the packages in order as children must be hashed first.
     (pkg-hash p))
 
-  (with [flock (flock/acquire (string store-path "/lock/gc.lock") :block :shared)]
-  (with [db (sqlite3/open (string store-path "/hermes.db"))]
+  (with [flock (flock/acquire (string *store-path* "/lock/gc.lock") :block :shared)]
+  (with [db (sqlite3/open (string *store-path* "/hermes.db"))]
     
     (defn has-pkg
       [pkg]
@@ -262,10 +274,9 @@
       (unless (has-pkg pkg)
         (each dep (get-in dep-info [:deps pkg])
           (unless (has-pkg dep)
-            (build2 dep))
-          (put registry (dep :builder) '*pkg-already-built*))
+            (build2 dep)))
 
-        (with [flock (flock/acquire (string store-path "/lock/" (pkg :hash) ".lock") :block :exclusive)]
+        (with [flock (flock/acquire (string *store-path* "/lock/" (pkg :hash) ".lock") :block :exclusive)]
           # After aquiring the package lock, check again that it doesn't exist.
           # This is in case multiple builders were waiting.
           (when (not (has-pkg pkg))
@@ -285,7 +296,9 @@
                 (os/setenv k nil))
               (os/cd tmpdir)
               (with-dyns [:pkg-out (pkg :path)]
+                (put registry (pkg :builder) nil)
                 (def frozen-builder (marshal (pkg :builder) registry))
+                (put registry (pkg :builder) '*pkg-noop-build*)
                 (def builder (unmarshal frozen-builder load-registry))
                 (builder)))
             
@@ -330,14 +343,14 @@
                   (constant nil))
     :main (sequence "/pkg/" :hash :name)
   })))
-  (when (string/has-prefix? store-path path)
-    (def tail (string/slice path (length store-path)))
+  (when (string/has-prefix? *store-path* path)
+    (def tail (string/slice path (length *store-path*)))
     (peg/match tail-peg tail)))
 
 (defn gc
   []
-  (with [flock (flock/acquire (string store-path "/lock/gc.lock") :block :exclusive)]
-  (with [db (sqlite3/open (string store-path "/hermes.db"))]
+  (with [flock (flock/acquire (string *store-path* "/lock/gc.lock") :block :exclusive)]
+  (with [db (sqlite3/open (string *store-path* "/hermes.db"))]
 
     (def work-q @[])
     (def visited @{})
@@ -351,7 +364,7 @@
                  is-link (= :link (rstat :mode))
                  [hash name] (path-to-pkg-parts (os/readlink root))
                  have-pkg (has-pkg-with-hash db hash)]
-          (array/push work-q (string store-path "/pkg/" (pkg-dir-name-from-parts hash name)))
+          (array/push work-q (string *store-path* "/pkg/" (pkg-dir-name-from-parts hash name)))
           (array/push dead-roots root)))
       (sqlite3/eval db "begin transaction;")
       (each root dead-roots
@@ -366,14 +379,14 @@
           (do
             (put visited pkg-dir true)
             (def pkg-info (jdn/decode (slurp (string pkg-dir "/.hpkg.jdn"))))
-            (array/concat work-q (map |(string store-path "/pkg/" $) (pkg-info :scanned-refs)))
+            (array/concat work-q (map |(string *store-path* "/pkg/" $) (pkg-info :scanned-refs)))
             (gc-walk)))))
     
     (process-roots)
     (gc-walk)
 
-    (each dirname (os/dir (string store-path "/pkg/"))
-      (def pkg-dir (string store-path "/pkg/" dirname))
+    (each dirname (os/dir (string *store-path* "/pkg/"))
+      (def pkg-dir (string *store-path* "/pkg/" dirname))
       (unless (visited pkg-dir)
         (when-let [[hash name] (path-to-pkg-parts pkg-dir)]
           (sqlite3/eval db "delete from Pkgs where Hash = :hash;" {:hash hash}))

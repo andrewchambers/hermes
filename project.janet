@@ -7,6 +7,7 @@
   :dependencies [
     "https://github.com/janet-lang/sqlite3.git"
     "https://github.com/janet-lang/argparse.git"
+    "https://github.com/janet-lang/path.git"
     "https://github.com/andrewchambers/janet-jdn.git"
     "https://github.com/andrewchambers/janet-flock.git"
     "https://github.com/andrewchambers/janet-process.git"
@@ -19,5 +20,9 @@
   :source ["hermes.c" "util.c" "sha1.c" "pkghash.c" "deps.c" "hashscan.c"])
 
 (declare-executable
- :name "hermes"
- :entry "main.janet")
+  :name "hermes"
+  :entry "hermes-main.janet")
+
+(declare-executable
+  :name "hermes-pkgstore"
+  :entry "hermes-pkgstore-main.janet")
