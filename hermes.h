@@ -19,6 +19,9 @@ typedef struct {
     Janet path; // nil or string
     Janet name; // nil or string
     Janet out_hash; // nil or string
+    Janet extra_refs; // nil or [Pkg]
+    Janet force_refs; // nil or [Pkg]
+    Janet weak_refs; // nil or [Pkg]
 } Pkg;
 
 /* hermes.c */

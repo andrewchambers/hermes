@@ -9,6 +9,9 @@ static int pkg_gcmark(void *p, size_t s) {
     janet_mark(pkg->out_hash);
     janet_mark(pkg->hash);
     janet_mark(pkg->path);
+    janet_mark(pkg->force_refs);
+    janet_mark(pkg->extra_refs);
+    janet_mark(pkg->weak_refs);
     return 0;
 }
 
@@ -28,6 +31,15 @@ static int pkg_get(void *ptr, Janet key, Janet *out) {
         return 1;
     } else if (janet_keyeq(key, "out-hash")) {
         *out = pkg->out_hash;
+        return 1;
+    } else if (janet_keyeq(key, "force-refs")) {
+        *out = pkg->force_refs;
+        return 1;
+    } else if (janet_keyeq(key, "weak-refs")) {
+        *out = pkg->weak_refs;
+        return 1;
+    } else if (janet_keyeq(key, "extra-refs")) {
+        *out = pkg->extra_refs;
         return 1;
     } else {
         return 0;
@@ -63,6 +75,29 @@ static void validate_pkg(Pkg *pkg) {
 
     if (!janet_checktypes(pkg->hash, JANET_TFLAG_NIL|JANET_TFLAG_STRING))
         janet_panicf("hash must be a string or nil, got %v", pkg->hash);
+
+#define CHECK_PKG_TUPLE(NAME, V) \
+    do {  \
+      if (janet_checktype(V, JANET_TUPLE)) { \
+        const Janet *vs = janet_unwrap_tuple(V); \
+        size_t n_vs = janet_tuple_length(vs); \
+        for (size_t i = 0; i < n_vs; i++) { \
+          if (!janet_checkabstract(vs[i], &pkg_type)) { \
+            janet_panicf(NAME "[%d] must be a package, got %v", i, vs[i]); \
+          } \
+        } \
+      } else if (janet_checktype(V, JANET_NIL)) { \
+        ; \
+      } else { \
+        janet_panicf(NAME " must be a tuple or nil, got %v", V); \
+      } \
+    } while (0);
+
+    CHECK_PKG_TUPLE("force-refs", pkg->force_refs);
+    CHECK_PKG_TUPLE("extra-refs", pkg->extra_refs);
+    CHECK_PKG_TUPLE("weak-refs", pkg->weak_refs);
+
+#undef CHECK_PKG_TUPLE
 }
 
 static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
@@ -73,6 +108,9 @@ static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
     janet_marshal_janet(ctx, pkg->out_hash);
     janet_marshal_janet(ctx, pkg->hash);
     janet_marshal_janet(ctx, pkg->path);
+    janet_marshal_janet(ctx, pkg->force_refs);
+    janet_marshal_janet(ctx, pkg->extra_refs);
+    janet_marshal_janet(ctx, pkg->weak_refs);
 }
 
 static void* pkg_unmarshal(JanetMarshalContext *ctx) {
@@ -82,17 +120,23 @@ static void* pkg_unmarshal(JanetMarshalContext *ctx) {
     pkg->out_hash = janet_unmarshal_janet(ctx);
     pkg->hash = janet_unmarshal_janet(ctx);
     pkg->path = janet_unmarshal_janet(ctx);
+    pkg->force_refs = janet_unmarshal_janet(ctx);
+    pkg->extra_refs = janet_unmarshal_janet(ctx);
+    pkg->weak_refs = janet_unmarshal_janet(ctx);
     validate_pkg(pkg);
     return pkg;
 }
 
 static Janet pkg(int argc, Janet *argv) {
-    janet_fixarity(argc, 3);
+    janet_fixarity(argc, 6);
 
     Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
     pkg->builder = argv[0];
     pkg->name = argv[1];
     pkg->out_hash = argv[2];
+    pkg->force_refs = argv[3];
+    pkg->extra_refs = argv[4];
+    pkg->weak_refs = argv[5];
     pkg->hash = janet_wrap_nil();
     pkg->path = janet_wrap_nil();
 

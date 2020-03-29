@@ -98,5 +98,8 @@ Janet pkg_dependencies(int argc, Janet *argv) {
     JanetTable *seen = janet_table(1);
     Pkg *p = janet_getabstract(argv, 0, &pkg_type);
     pkg_dependencies2(deps, seen, p->builder);
+    pkg_dependencies2(deps, seen, p->force_refs);
+    pkg_dependencies2(deps, seen, p->extra_refs);
+    pkg_dependencies2(deps, seen, p->weak_refs);
     return janet_wrap_table(deps);
 }

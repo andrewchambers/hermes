@@ -495,6 +495,9 @@ Janet pkg_hash(int32_t argc, Janet *argv) {
     hash_one(&st, janet_wrap_string(store_path), 0);
     hash_one(&st, pkg->name, 0);
     hash_one(&st, pkg->builder, 0);
+    hash_one(&st, pkg->force_refs, 0);
+    hash_one(&st, pkg->weak_refs, 0);
+    hash_one(&st, pkg->extra_refs, 0);
 
     JanetString hash = finalize_pkg_hash_state(&st);
     pkg->hash = janet_wrap_string(hash);

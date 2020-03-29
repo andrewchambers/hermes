@@ -102,8 +102,11 @@
     :builder builder
     :name name
     :out-hash out-hash
+    :force-refs force-refs
+    :extra-refs extra-refs
+    :weak-refs weak-refs
   }]
-  (_hermes/pkg builder name out-hash))
+  (_hermes/pkg builder name out-hash force-refs extra-refs weak-refs))
 
 (defn- save-process-env
   []
@@ -281,15 +284,15 @@
           # This is in case multiple builders were waiting.
           (when (not (has-pkg pkg))
             (when (os/stat (pkg :path))
-              (sh/$ ["chmod" "-v" "-R" "u+w" (pkg :path)])
-              (sh/$ ["rm" "-vrf" (pkg :path)]))
-            (sh/$ ["mkdir" "-v" (pkg :path)])
+              (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
+              (sh/$ ["rm" "-rf" (pkg :path)]))
+            (sh/$ ["mkdir" (pkg :path)])
             (def env (save-process-env))
             (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
             (defer (do
                      (restore-process-env env)
                      (sh/$ ["chmod" "-R" "u+w" tmpdir])
-                     (sh/$ ["rm" "-rf" tmpdir]))
+                     (sh/$ ["rm" "-r" tmpdir]))
               # Wipe env so package builds
               # don't accidentally rely on any state.
               (eachk k (env :environ)
@@ -305,16 +308,24 @@
             (when-let [out-hash (pkg :out-hash)]
               (assert-dir-hash (pkg :path) out-hash))
 
+            (defn refset-to-dirnames
+              [pkg set-key]
+              (when-let [rs (pkg set-key)]
+                (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
+
             (def scanned-refs (ref-scan db pkg))
             
             (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
               :name (pkg :name)
               :hash (pkg :hash)
+              :force-refs (refset-to-dirnames pkg :force-refs)
+              :weak-refs  (refset-to-dirnames pkg :weak-refs)
+              :extra-refs (refset-to-dirnames pkg :extra-refs)
               :scanned-refs scanned-refs
             }))
 
             # Set package permissions.
-            (sh/$ ["chmod" "-v" "-R" "a-w,a+r,a+X" (pkg :path)])
+            (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
 
             (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
               {:hash (pkg :hash) :name (pkg :name)})))
@@ -379,7 +390,17 @@
           (do
             (put visited pkg-dir true)
             (def pkg-info (jdn/decode (slurp (string pkg-dir "/.hpkg.jdn"))))
-            (array/concat work-q (map |(string *store-path* "/pkg/" $) (pkg-info :scanned-refs)))
+            (def ref-to-full-path |(string *store-path* "/pkg/" $))
+            (array/concat work-q
+              (map ref-to-full-path
+                (if (pkg-info :force-refs)
+                  (pkg-info :force-refs)
+                  (let [refs (array/concat @[]
+                               (get pkg-info :scanned-refs [])
+                               (get pkg-info :extra-refs []))]
+                    (if-let [weak-refs (pkg-info :weak-refs)]
+                      (filter |(get weak-refs $) refs)
+                      refs)))))
             (gc-walk)))))
     
     (process-roots)
@@ -397,3 +418,4 @@
     (build-lock-cleanup)
 
     nil)))
+
