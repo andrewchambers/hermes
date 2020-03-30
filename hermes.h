@@ -18,9 +18,9 @@ typedef struct {
     Janet builder; // nil function
     Janet path; // nil or string
     Janet name; // nil or string
-    Janet out_hash; // nil or string
+    Janet content; // nil or string or struct
     Janet extra_refs; // nil or [Pkg]
-    Janet force_refs; // nil or [Pkg]
+    Janet forced_refs; // nil or [Pkg]
     Janet weak_refs; // nil or [Pkg]
 } Pkg;
 
@@ -40,7 +40,7 @@ Janet hash_scan(int32_t argc, Janet *argv);
 
 Janet pkg_dependencies(int argc, Janet *argv);
 
-/*  util.c */
+/*  scratchvec.c */
 
 #define scratch_v_free(v)         (((v) != NULL) ? (janet_sfree(scratch_v__raw(v)), 0) : 0)
 #define scratch_v_push(v, x)      (scratch_v__maybegrow(v, 1), (v)[scratch_v__cnt(v)++] = (x))

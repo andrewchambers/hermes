@@ -6,10 +6,10 @@ static int pkg_gcmark(void *p, size_t s) {
     Pkg *pkg = p;
     janet_mark(pkg->builder);
     janet_mark(pkg->name);
-    janet_mark(pkg->out_hash);
+    janet_mark(pkg->content);
     janet_mark(pkg->hash);
     janet_mark(pkg->path);
-    janet_mark(pkg->force_refs);
+    janet_mark(pkg->forced_refs);
     janet_mark(pkg->extra_refs);
     janet_mark(pkg->weak_refs);
     return 0;
@@ -29,11 +29,11 @@ static int pkg_get(void *ptr, Janet key, Janet *out) {
     } else if (janet_keyeq(key, "name")) {
         *out = pkg->name;
         return 1;
-    } else if (janet_keyeq(key, "out-hash")) {
-        *out = pkg->out_hash;
+    } else if (janet_keyeq(key, "content")) {
+        *out = pkg->content;
         return 1;
     } else if (janet_keyeq(key, "force-refs")) {
-        *out = pkg->force_refs;
+        *out = pkg->forced_refs;
         return 1;
     } else if (janet_keyeq(key, "weak-refs")) {
         *out = pkg->weak_refs;
@@ -67,8 +67,10 @@ static void validate_pkg(Pkg *pkg) {
         }
     }
 
-    if (!janet_checktypes(pkg->out_hash, JANET_TFLAG_NIL|JANET_TFLAG_STRING))
-        janet_panicf("out-hash must be a string or nil, got %v", pkg->out_hash);
+    if (!janet_checktypes(pkg->content, JANET_TFLAG_NIL|JANET_TFLAG_STRING|JANET_TFLAG_STRUCT))
+        janet_panicf("content must be a string, nil or a struct, got %v", pkg->content);
+    // XXX We could recursively check the struct, but this is somewhat duplicated by the
+    // normal checking code.
 
     if (!janet_checktypes(pkg->path, JANET_TFLAG_NIL|JANET_TFLAG_STRING))
         janet_panicf("path must be a string or nil, got %v", pkg->path);
@@ -93,11 +95,12 @@ static void validate_pkg(Pkg *pkg) {
       } \
     } while (0);
 
-    CHECK_PKG_TUPLE("force-refs", pkg->force_refs);
+    CHECK_PKG_TUPLE("force-refs", pkg->forced_refs);
     CHECK_PKG_TUPLE("extra-refs", pkg->extra_refs);
     CHECK_PKG_TUPLE("weak-refs", pkg->weak_refs);
 
 #undef CHECK_PKG_TUPLE
+
 }
 
 static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
@@ -105,10 +108,10 @@ static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
     janet_marshal_abstract(ctx, p);
     janet_marshal_janet(ctx, pkg->builder);
     janet_marshal_janet(ctx, pkg->name);
-    janet_marshal_janet(ctx, pkg->out_hash);
+    janet_marshal_janet(ctx, pkg->content);
     janet_marshal_janet(ctx, pkg->hash);
     janet_marshal_janet(ctx, pkg->path);
-    janet_marshal_janet(ctx, pkg->force_refs);
+    janet_marshal_janet(ctx, pkg->forced_refs);
     janet_marshal_janet(ctx, pkg->extra_refs);
     janet_marshal_janet(ctx, pkg->weak_refs);
 }
@@ -117,10 +120,10 @@ static void* pkg_unmarshal(JanetMarshalContext *ctx) {
     Pkg *pkg = janet_unmarshal_abstract(ctx, sizeof(Pkg));
     pkg->builder = janet_unmarshal_janet(ctx);
     pkg->name = janet_unmarshal_janet(ctx);
-    pkg->out_hash = janet_unmarshal_janet(ctx);
+    pkg->content = janet_unmarshal_janet(ctx);
     pkg->hash = janet_unmarshal_janet(ctx);
     pkg->path = janet_unmarshal_janet(ctx);
-    pkg->force_refs = janet_unmarshal_janet(ctx);
+    pkg->forced_refs = janet_unmarshal_janet(ctx);
     pkg->extra_refs = janet_unmarshal_janet(ctx);
     pkg->weak_refs = janet_unmarshal_janet(ctx);
     validate_pkg(pkg);
@@ -133,8 +136,8 @@ static Janet pkg(int argc, Janet *argv) {
     Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
     pkg->builder = argv[0];
     pkg->name = argv[1];
-    pkg->out_hash = argv[2];
-    pkg->force_refs = argv[3];
+    pkg->content = argv[2];
+    pkg->forced_refs = argv[3];
     pkg->extra_refs = argv[4];
     pkg->weak_refs = argv[5];
     pkg->hash = janet_wrap_nil();

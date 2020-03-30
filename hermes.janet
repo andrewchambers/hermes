@@ -11,49 +11,118 @@
   [store-path]
   (set *store-path* (path/abspath store-path)))
 
-(defn assert-dir-hash
-  [path expected]
-  
-  (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
-  
-  (defn dir-hash
-    [hasher path]
-    (def wd (os/cwd))
-    (defer (os/cd wd)
-      (os/cd path)
-      (sh/$$
-        (sh/pipeline [
-          ["find" "." "-print0"]
-          ["sort" "-z"]
-          ["tar"
-            "-c"
-            "-f" "-"
-            "--numeric-owner"
-            "--owner=0"
-            "--group=0"
-            "--mode=go-rwx,u-rw"
-            "--mtime=1970-01-01"
-            "--no-recursion"
-            "--null"
-            "--files-from" "-"]
-          hasher
-        ]))))
 
+(defn check-content
+  [base-path content]
+
+  (defn- bad-content
+    [msg]
+    (return :check-content [:fail msg]))
+
+  (defn- check-file-hash
+    [path expected]
+    (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
+    
     (def actual
       (match (string/split ":" expected)
         ["sha256" _]
-          (do
-            (def actual
-              (as-> [sha256sum-bin "-b" "-"] _
-                    (dir-hash _ path)
-                    (string/split " " _)
-                    (first _)))
-            (string "sha256:" actual))
+          (string "sha256:"
+            (->> [sha256sum-bin path]
+              (sh/$$)
+              (string)
+              (string/split " ")
+              (first)))
         _ 
-          (error (string "unsupported hash format - " expected))))
+          (bad-content (string "unsupported hash format - " expected))))
+      (unless (= expected actual)
+        (bad-content (string "expected " path " to have hash " expected " but got " actual))))
 
-    (unless (= expected actual)
-        (error (string/format "expected %v to have hash %s but got %s" path expected actual))))
+  (defn- check-dir-hash
+    [path expected]
+    
+    (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
+    
+    (defn dir-hash
+      [hasher path]
+      (def wd (os/cwd))
+      (defer (os/cd wd)
+        (os/cd path)
+        (sh/$$
+          (sh/pipeline [
+            ["find" "." "-print0"]
+            ["sort" "-z"]
+            ["tar"
+              "-c"
+              "-f" "-"
+              "--numeric-owner"
+              "--owner=0"
+              "--group=0"
+              "--mode=go-rwx,u-rw"
+              "--mtime=1970-01-01"
+              "--no-recursion"
+              "--null"
+              "--files-from" "-"]
+            hasher
+          ]))))
+
+      (def actual
+        (match (string/split ":" expected)
+          ["sha256" _]
+            (do
+              (def actual
+                (as-> [sha256sum-bin "-b" "-"] _
+                      (dir-hash _ path)
+                      (string/split " " _)
+                      (first _)))
+              (string "sha256:" actual))
+          _ 
+            (bad-content (string "unsupported hash format - " expected))))
+      (unless (= expected actual)
+        (bad-content (string/format "expected %v to have hash %s but got %s" path expected actual))))
+
+  (defn- check-content2
+    [path content &opt st ]
+    (default st (os/lstat path))
+    (unless st
+      (bad-content (string "expected content at " path)))
+    (cond
+      (string? content)
+        (case (st :mode)
+          :directory
+            (check-dir-hash path content)
+          :link
+            (unless (= content (os/readlink path))
+              (bad-content (string "link at " path " expected to point to " (content :content))))
+          :file
+            (check-file-hash path content)
+          (bad-content (string "unexpected mode " (st :mode) " at " path)))
+      (struct? content)
+        (do
+          (unless (= (st :mode) :directory)
+            (bad-content (string "expected a directory at " path)))
+          (def ents (os/dir path))
+          (unless (= (length ents) (length content))
+            (bad-content (string (length ents) " directory entries, expected " (length content) " at " path)))
+          (each ent-name ents
+            (def ent-path (string path "/" ent-name))
+            (def st (os/stat ent-path))
+            (def expected-mode (get (content ent-name) :mode :file))
+            (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
+            (unless (= (st :mode) expected-mode)
+              (bad-content (string "expected " expected-mode " at " ent-path)))
+            (unless (= (st :permissions) expected-perms)
+              (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (st :permissions))))
+            
+            (let [subcontent (content ent-name)]
+              (unless (struct? subcontent )
+                (bad-content (string "content entry for " path " must be be a struct")))
+              (check-content2 ent-path (subcontent  :content) st)))
+
+      (bad-content (string "unsupported content type in content map: " (type content) " at " path))))
+
+  (prompt :check-content 
+    (check-content2 base-path content)
+    :ok))
 
 (defn- fetch
   [url &opt dest]
@@ -101,12 +170,12 @@
   [&keys {
     :builder builder
     :name name
-    :out-hash out-hash
+    :content content
     :force-refs force-refs
     :extra-refs extra-refs
     :weak-refs weak-refs
   }]
-  (_hermes/pkg builder name out-hash force-refs extra-refs weak-refs))
+  (_hermes/pkg builder name content force-refs extra-refs weak-refs))
 
 (defn- save-process-env
   []
@@ -304,9 +373,6 @@
                 (put registry (pkg :builder) '*pkg-noop-build*)
                 (def builder (unmarshal frozen-builder load-registry))
                 (builder)))
-            
-            (when-let [out-hash (pkg :out-hash)]
-              (assert-dir-hash (pkg :path) out-hash))
 
             (defn refset-to-dirnames
               [pkg set-key]
@@ -315,6 +381,17 @@
 
             (def scanned-refs (ref-scan db pkg))
             
+            # Set package permissions.
+            (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
+
+            (when-let [content (pkg :content)]
+              (match (check-content (pkg :path) content)
+                [:fail msg]
+                  (error msg)))
+
+            # XXX It seems inefficient to shell out to chmod so many times.
+            (sh/$ ["chmod" "u+w" (pkg :path)])
+
             (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
               :name (pkg :name)
               :hash (pkg :hash)
@@ -322,10 +399,10 @@
               :weak-refs  (refset-to-dirnames pkg :weak-refs)
               :extra-refs (refset-to-dirnames pkg :extra-refs)
               :scanned-refs scanned-refs
+              :content (pkg :content)
             }))
 
-            # Set package permissions.
-            (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
+            (sh/$ ["chmod" "u-w" (pkg :path)])
 
             (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
               {:hash (pkg :hash) :name (pkg :name)})))

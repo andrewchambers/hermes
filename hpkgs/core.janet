@@ -1,7 +1,7 @@
 
 (def bootstrap
   (pkg
-    :out-hash
+    :content
       "sha256:f6c56e84b78b7d1d57aa9c127b23b9fd5c729410b4ecad9012b0de5ab55649bd"
     :builder
       (fn []
@@ -17,8 +17,8 @@
   (pkg
     :name
       name
-    :out-hash
-      hash
+    :content
+      {fname {:content hash}}
     :builder
       (fn []
         (fetch url (string (dyn :pkg-out) "/" fname)))
@@ -62,79 +62,79 @@
   :src-url
     "http://gondor.apana.org.au/~herbert/dash/files/dash-0.5.10.tar.gz"
   :src-hash
-    "sha256:4273c06551b2c1f281c9ca92e69e8bb01783fdbf8eef85a630640c63043732bf")
+    "sha256:ad70e0cc3116b424931c392912b3ebdb8053b21f3fd968c782f0b19fd8ae31ab")
 
 (defcore coreutils
   :src-url
     "https://ftp.gnu.org/gnu/coreutils/coreutils-8.31.tar.xz"
   :src-hash
-    "sha256:b812a9a95a7de00367309940f39cf822c5b5e749b18e78fa045694872828a146")
+    "sha256:ff7a9c918edce6b4f4b2725e3f9b37b0c4d193531cac49a48b56c4d0d3a9e9fd")
 
 (defcore awk
   :src-url
     "https://ftp.gnu.org/gnu/gawk/gawk-5.0.1.tar.xz"
   :src-hash
-    "sha256:614c7af2bc8bf801bc0e7db1f15866b0b445bb10e38b920d234d7e858d0f220b")
+    "sha256:8e4e86f04ed789648b66f757329743a0d6dfb5294c3b91b756a474f1ce05a794")
 
 (defcore diffutils
   :src-url
     "https://ftp.gnu.org/gnu/diffutils/diffutils-3.7.tar.xz"
   :src-hash
-    "sha256:8ff1882ea86b38be2f28dc335152bb5678af4f3187ae4cc436ea88a5b2807fb3")
+    "sha256:b3a7a6221c3dc916085f0d205abf6b8e1ba443d4dd965118da364a1dc1cb3a26")
 
 (defcore findutils
   :src-url
     "https://ftp.gnu.org/pub/gnu/findutils/findutils-4.7.0.tar.xz"
   :src-hash
-    "sha256:5e22d995f9f378bad17538fccde3cc67df618aac937f3ef1b51fb2ff37137e60")
+    "sha256:c5fefbdf9858f7e4feb86f036e1247a54c79fc2d8e4b7064d5aaa1f47dfa789a")
 
 (defcore make
   :src-url
     "https://ftp.gnu.org/gnu/make/make-4.2.tar.gz"
   :src-hash
-    "sha256:929b96ab4083fb3efee19ad2e9e6faaa53828a28e8f2282306228c527b6bbd7a")
+    "sha256:e968ce3c57ad39a593a92339e23eb148af6296b9f40aa453a9a9202c99d34436")
 
 (defcore patch
   :src-url
     "https://ftp.gnu.org/gnu/patch/patch-2.7.tar.gz"
   :src-hash
-    "sha256:f88b9f95bd536910329bf8b9dce3f066ec4ca9fe61217e1caf882c4673cc8d8e")
+    "sha256:59c29f56faa0a924827e6a60c6accd6e2900eae5c6aaa922268c717f06a62048")
 
 (defcore pkgconf
   :src-url
     "https://distfiles.dereferenced.org/pkgconf/pkgconf-1.6.3.tar.xz"
   :src-hash
-    "sha256:ae9fd87179b6e1adbd90cf4f484eb62922e7798f460260da51bbd7e0a4735cb5")
+    "sha256:61f0b31b0d5ea0e862b454a80c170f57bad47879c0c42bd8de89200ff62ea210")
 
 (defcore sed
   :src-url
     "https://ftp.gnu.org/gnu/sed/sed-4.7.tar.xz"
   :src-hash
-    "sha256:04a30573b1375d4b80412fd686abf46e78d92eb29667589e0f6e72091fc08ea2")
+    "sha256:2885768cd0a29ff8d58a6280a270ff161f6a3deb5690b2be6c49f46d4c67bd6a")
 
 (defcore grep
   :src-url
     "https://ftp.gnu.org/gnu/grep/grep-3.3.tar.xz"
   :src-hash
-    "sha256:bc8e712d9a11f110c675c2f3959cd3781808ee10b13c13c9f10bebaa3e9de389")
+    "sha256:b960541c499619efd6afe1fa795402e4733c8e11ebf9fafccc0bb4bccdc5b514")
 
 (defcore which
   :src-url
     "https://ftp.gnu.org/gnu/which/which-2.21.tar.gz"
   :src-hash
-    "sha256:81707303a5b68562ef242036d6e697f3a5539679cc6cda1191ac1c3014d09ec4")
+    "sha256:f4a245b94124b377d8b49646bf421f9155d36aa7614b6ebf83705d3ffc76eaad")
 
 (defcore tar
   :src-url
     "https://ftp.gnu.org/gnu/tar/tar-1.32.tar.gz"
   :src-hash
-    "sha256:ff3e8ef8b959813f3c3c10b993c2b8f4c18974ed85b2e418dc67c386f91e0be0")
+    "sha256:b59549594d91d84ee00c99cf2541a3330fed3a42c440503326dab767f2fbb96c")
 
 (defcore gzip
   :src-url
     "https://ftp.gnu.org/gnu/gzip/gzip-1.10.tar.gz"
   :src-hash
-    "sha256:088d9a30007446dd85f7efe27403d82177b384713448fb575aa47cb70ff3ba6a")
+    "sha256:c91f74430bf7bc20402e1f657d0b252cb80aa66ba333a25704512af346633c68")
 
 (defsrc bzip2-src
   :url
@@ -164,13 +164,13 @@
   :src-url
     "http://download.savannah.gnu.org/releases/lzip/lzip-1.21.tar.gz"
   :src-hash
-    "sha256:0d2d0f197a444d6d3a9edac84e2c4536e29d44111233c0c268185c2aee42971b")
+    "sha256:e48b5039d3164d670791f9c5dbaa832bf2df080cb1fbb4f33aa7b3300b670d8b")
 
 (defcore xz
   :src-url
     "https://tukaani.org/xz/xz-5.2.4.tar.gz"
   :src-hash
-    "sha256:e0639989aa21a9487908d106a44065372a8e371e35d1d5fb51b1ec9d5008438b")
+    "sha256:b512f3b726d3b37b6dc4c8570e137b9311e7552e8ccbab4d39d47ce5f4177145")
 
 (defn make-combined-env
   [&keys {:name name
@@ -190,6 +190,11 @@
           (def to (string (dyn :pkg-out) "/bin/" bin))
           (unless (os/stat to)
             (os/symlink from to))))
+      (def activate-script (string (dyn :pkg-out) "/activate"))
+      (spit activate-script 
+        (string
+          "export PATH=" (string (dyn :pkg-out) "/bin") "\n"))
+      (os/chmod activate-script 8r555)
       (when post-build
         (post-build)))))
 
@@ -220,46 +225,46 @@
 
 (defsrc musl-cross-make-src
   :url "https://github.com/richfelker/musl-cross-make/archive/v0.9.9.tar.gz"
-  :hash "sha256:0e2dc83f870cd48f545470bdf5acddabf296aca155705312f292fc2b22e41b88")
+  :hash "sha256:ff3e2188626e4e55eddcefef4ee0aa5a8ffb490e3124850589bcaf4dd60f5f04")
 
 (defsrc gcc-src
   :url "https://ftp.gnu.org/pub/gnu/gcc/gcc-9.2.0/gcc-9.2.0.tar.xz"
-  :hash "sha256:e25f41bb630915c9a2de18e959c7f920cda202022e7c815090c519f3ce36db81")
+  :hash "sha256:ea6ef08f121239da5695f76c9b33637a118dcf63e24164422231917fa61fb206")
 
 (defsrc binutils-src
   :url "https://ftp.gnu.org/pub/gnu/binutils/binutils-2.33.1.tar.xz"
-  :hash "sha256:f6245cf858b2a50a515e5d13d1be3e2acbf7cb5f4873baa6319d83ff3d700a7e")
+  :hash "sha256:ab66fc2d1c3ec0359b8e08843c9f33b63e8707efdff5e4cc5c200eae24722cbf")
 
 (defsrc gmp-src
   :url "https://ftp.gnu.org/pub/gnu/gmp/gmp-6.1.2.tar.bz2"
-  :hash "sha256:1dc7d51347da25aa183cdae34c064938c1540b4328a352c6ddef59d917499e16")
+  :hash "sha256:5275bb04f4863a13516b2f39392ac5e272f5e1bb8057b18aec1c9b79d73d8fb2")
 
 (defsrc mpc-src
   :url "https://ftp.gnu.org/gnu/mpc/mpc-1.1.0.tar.gz"
-  :hash "sha256:8dcdaea72d8e107c75dda72c215664f07e1da6c648da2f0c9dc41903c9a745a5")
+  :hash "sha256:6985c538143c1208dcb1ac42cedad6ff52e267b47e5f970183a3e75125b43c2e")
 
 (defsrc mpfr-src
   :url "https://ftp.gnu.org/pub/gnu/mpfr/mpfr-4.0.2.tar.bz2"
-  :hash "sha256:1a962881aeac34c637ae68946b8795b81f059e80e986c9955db8bc33f6d9b901")
+  :hash "sha256:c05e3f02d09e0e9019384cdd58e0f19c64e6db1fd6f5ecf77b4b1c61ca253acc")
 
 (defsrc musl-src
   :url "https://www.musl-libc.org/releases/musl-1.2.0.tar.gz"
-  :hash "sha256:13c4b5a3b00f7e097ab4c8f06772785f5408b7f65fcb76cf1e12aa79fd84f33b")
+  :hash "sha256:c6de7b191139142d3f9a7b5b702c9cae1b5ee6e7f57e582da9328629408fd4e8")
 
 (defsrc linux-hdrs-src
   :url "http://ftp.barfooze.de/pub/sabotage/tarballs//linux-headers-4.19.88.tar.xz"
-  :hash "sha256:741546ea9581dce73534d3ca8445e5243aa21b7b01d22d82019b459a34fbc160")
+  :hash "sha256:d3f3acf6d16bdb005d3f2589ade1df8eff2e1c537f92e6cd9222218ead882feb")
 
 # XXX Why does musl cross make download this?
 (def- config.sub
   (pkg
-    :out-hash "sha256:df2fda02b714aa5815f2107a9b6d0af508aa51df59e84bab29fcdd672bf9ede9"
+    :content
+      {"config.sub" {:content "sha256:75d5d255a2a273b6e651f82eecfabf6cbcd8eaeae70e86b417384c8f4a58d8d3"}}
     :builder
-    (fn []
-      (fetch
-        "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
-        (string (dyn :pkg-out) "/" "config.sub")))))
-
+      (fn []
+        (fetch
+          "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
+          (string (dyn :pkg-out) "/" "config.sub")))))
 
 (defn- install-musl-cross-make-gcc
   [post-extract post-install]
