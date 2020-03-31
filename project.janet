@@ -26,3 +26,7 @@
 (declare-executable
   :name "hermes-pkgstore"
   :entry "hermes-pkgstore-main.janet")
+
+(declare-executable
+  :name "hermes-builder"
+  :entry "hermes-builder-main.janet")

@@ -11,7 +11,6 @@
   [store-path]
   (set *store-path* (path/abspath store-path)))
 
-
 (defn check-content
   [base-path content]
 
@@ -114,9 +113,9 @@
               (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (st :permissions))))
             
             (let [subcontent (content ent-name)]
-              (unless (struct? subcontent )
+              (unless (struct? subcontent)
                 (bad-content (string "content entry for " path " must be be a struct")))
-              (check-content2 ent-path (subcontent  :content) st)))
+              (check-content2 ent-path (subcontent  :content) st))))
 
       (bad-content (string "unsupported content type in content map: " (type content) " at " path))))
 
@@ -159,6 +158,7 @@
 (put builder-env 'sh/$$  @{:value sh/$$})
 (put builder-env 'sh/$$_ @{:value sh/$$_})
 (put builder-env 'sh/$?  @{:value sh/$?})
+(put builder-env '*pkg-noop-build* (fn [&] nil))
 (def builder-load-registry (env-lookup builder-env))
 (def builder-registry (invert builder-load-registry))
 
@@ -251,6 +251,23 @@
   (os/mkdir path)
   (os/mkdir (string path "/lock"))
   (spit (string path "/lock/gc.lock") "")
+  (spit (string path "/cfg.jdn") `
+{
+  # Build users used for sandboxed package builds.
+  :build-users [
+    "hermes_build_user0"
+    "hermes_build_user1"
+    "hermes_build_user2"
+    "hermes_build_user3"
+    "hermes_build_user4"
+    "hermes_build_user5"
+    "hermes_build_user6"
+    "hermes_build_user7"
+    "hermes_build_user8"
+    "hermes_build_user9"
+  ]
+}
+  `)
 
   (os/mkdir (string path "/pkg"))
   (with [db (sqlite3/open (string path "/hermes.db"))]
@@ -262,6 +279,10 @@
       (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
       (sqlite3/eval db "commit;")))
   nil)
+
+(defn load-store-config
+  []
+  (jdn/decode (slurp (string *store-path* "/cfg.jdn"))))
 
 (defn compute-build-dep-info
   [pkg]
@@ -298,6 +319,23 @@
       (array/push refs (pkg-dir-name-from-parts h (row :Name)))))
   refs)
 
+(defn select-and-lock-build-user
+  [users]
+  (when (empty? users)
+    (error "build user list empty empty"))
+  (defn select-and-lock-build-user2
+    [users idx]
+    (if (= idx (length users))
+      (do
+        # XXX exp backoff?
+        (os/sleep 0.5)
+        (select-and-lock-build-user2 users 0))
+      (let [u (users idx)]
+        (if-let [user-lock (flock/acquire (string *store-path* "/lock/user-" u ".lock") :noblock :exclusive)]
+          @{:user u :lock user-lock :close (fn [self] (:close (self :lock)))}
+          (select-and-lock-build-user2 users (inc idx))))))
+  (select-and-lock-build-user2 users 0))
+
 (defn- build-lock-cleanup
   []
   (def all-locks (os/dir (string *store-path* "/lock")))
@@ -318,6 +356,8 @@
 (defn build
   [pkg &opt root]
 
+  (def cfg (load-store-config))
+
   (def dep-info (compute-build-dep-info pkg))
 
   # Copy registry so we can update it as we build packages.
@@ -326,10 +366,6 @@
   (each p (dep-info :order)
     (put registry (p :builder) '*pkg-noop-build*))
 
-  (def load-registry (invert registry))
-  (put load-registry '*pkg-noop-build* (fn [&] nil))
-
-    
   (each p (dep-info :order)
     # Hash the packages in order as children must be hashed first.
     (pkg-hash p))
@@ -348,36 +384,34 @@
           (unless (has-pkg dep)
             (build2 dep)))
 
-        (with [flock (flock/acquire (string *store-path* "/lock/" (pkg :hash) ".lock") :block :exclusive)]
+        (with [locked-user (select-and-lock-build-user (get cfg :build-users []))]
+        (with [flock (flock/acquire (string *store-path* "/lock/build-" (pkg :hash) ".lock") :block :exclusive)]
           # After aquiring the package lock, check again that it doesn't exist.
           # This is in case multiple builders were waiting.
           (when (not (has-pkg pkg))
+            
             (when (os/stat (pkg :path))
               (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
               (sh/$ ["rm" "-rf" (pkg :path)]))
+            
             (sh/$ ["mkdir" (pkg :path)])
-            (def env (save-process-env))
+            
             (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
-            (defer (do
-                     (restore-process-env env)
-                     (sh/$ ["chmod" "-R" "u+w" tmpdir])
-                     (sh/$ ["rm" "-r" tmpdir]))
-              # Wipe env so package builds
-              # don't accidentally rely on any state.
-              (eachk k (env :environ)
-                (os/setenv k nil))
+            (def thunk-path (string tmpdir "/.pkg.thunk"))
+            
+            (defn do-build []
               (os/cd tmpdir)
               (with-dyns [:pkg-out (pkg :path)]
-                (put registry (pkg :builder) nil)
-                (def frozen-builder (marshal (pkg :builder) registry))
-                (put registry (pkg :builder) '*pkg-noop-build*)
-                (def builder (unmarshal frozen-builder load-registry))
-                (builder)))
+                ((pkg :builder))))
 
-            (defn refset-to-dirnames
-              [pkg set-key]
-              (when-let [rs (pkg set-key)]
-                (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
+            (put registry (pkg :builder) nil)
+            (spit thunk-path (marshal do-build registry))
+            (put registry (pkg :builder) '*pkg-noop-build*)
+            (defer (do
+                     (sh/$ ["chmod" "-R" "u+w" tmpdir])
+                     (sh/$ ["rm" "-r" tmpdir]))
+              (sh/$ ["hermes-builder" "-t" thunk-path]))
+
 
             (def scanned-refs (ref-scan db pkg))
             
@@ -392,6 +426,11 @@
             # XXX It seems inefficient to shell out to chmod so many times.
             (sh/$ ["chmod" "u+w" (pkg :path)])
 
+            (defn refset-to-dirnames
+              [pkg set-key]
+              (when-let [rs (pkg set-key)]
+                (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
+
             (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
               :name (pkg :name)
               :hash (pkg :hash)
@@ -405,7 +444,7 @@
             (sh/$ ["chmod" "u-w" (pkg :path)])
 
             (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
-              {:hash (pkg :hash) :name (pkg :name)})))
+              {:hash (pkg :hash) :name (pkg :name)}))))
 
           nil))
 

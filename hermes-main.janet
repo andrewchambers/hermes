@@ -89,11 +89,11 @@
   (os/exit 
     (defer (sh/$ ["rm" "-rf" tmpdir])
       
-      (def thunk (string tmpdir "/pkg.thunk"))
+      (def pkg-path (string tmpdir "/hermes-build.pkg"))
       
-      (spit thunk (marshal pkg hermes/marshal-client-pkg-registry))
+      (spit pkg-path (marshal pkg hermes/marshal-client-pkg-registry))
       
-      (def pkgstore-cmd @["hermes-pkgstore" "build" "-s" *store-path* "-t" thunk])
+      (def pkgstore-cmd @["hermes-pkgstore" "build" "-s" *store-path* "-p" pkg-path])
       
       (when (parsed-args "no-out-link")
         (array/concat pkgstore-cmd ["-n"]))

@@ -22,19 +22,18 @@
   (hermes/set-store-path (parsed-args "store"))
   (hermes/init-store))
 
-
 (def- build-params
-  ["Build a marshalled package thunk."
+  ["Build a marshalled package."
    "store" 
      {:kind :option
       :short "s"
       :required true
-      :help "Package store to save the thunk result in."}
-   "thunk" 
+      :help "Package store to use for build."}
+   "package" 
      {:kind :option
-      :short "t"
+      :short "p"
       :required true
-      :help "Path to marshalled package thunk."}
+      :help "Path to marshalled package."}
    "output" 
       {:kind :option
        :short "o"
@@ -53,10 +52,10 @@
   
   (hermes/set-store-path (parsed-args "store"))
 
-  (def pkg (unmarshal (slurp (parsed-args "thunk")) hermes/builder-load-registry))
+  (def pkg (unmarshal (slurp (parsed-args "package")) hermes/builder-load-registry))
 
   (unless (= (type pkg) :hermes/pkg)
-    (error (string/format "thunk did did not return a valid package, got %v" pkg)))
+    (error (string/format "pkg did did not return a valid package, got %v" pkg)))
 
   (def out-link (unless (parsed-args "no-out-link") (parsed-args "output")))
 
