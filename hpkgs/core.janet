@@ -30,6 +30,7 @@
     :name name
     :builder
     (fn []
+      (os/symlink (string (bootstrap :path) "/bin/dash") "/bin/sh")
       (os/setenv "PATH" (string (bootstrap :path) "/bin"))
       # XXX we shouldn't need to do this at build time.
       (def src-archive (->> (src :path)
@@ -450,6 +451,7 @@
     :name name
     :builder
     (fn std-builder []
+      (os/symlink (string (dash :path) "/bin/dash") "/bin/sh")
       (def all-bin-inputs (array/concat @[] bin-inputs [core-build-env]))
       (os/setenv "PATH"
         (string/join (map |(string ($ :path) "/bin") all-bin-inputs) ":"))

@@ -213,7 +213,7 @@
     (array/remove a 0 (length a))
     a)
 
-  (def saved-process-env (save-process-env))
+  (def saved-process-env (save-process-env)) # XXX shouldn't be needed with proper sandboxed env.
   (def saved-root-env (merge-into @{} root-env))
   (def saved-mod-paths (array ;module/paths))
   (def saved-mod-cache (merge-into @{} module/cache))
@@ -255,16 +255,7 @@
 {
   # Build users used for sandboxed package builds.
   :build-users [
-    "hermes_build_user0"
-    "hermes_build_user1"
-    "hermes_build_user2"
-    "hermes_build_user3"
-    "hermes_build_user4"
-    "hermes_build_user5"
-    "hermes_build_user6"
-    "hermes_build_user7"
-    "hermes_build_user8"
-    "hermes_build_user9"
+    "ac" # XXX TODO
   ]
 }
   `)
@@ -319,22 +310,28 @@
       (array/push refs (pkg-dir-name-from-parts h (row :Name)))))
   refs)
 
-(defn select-and-lock-build-user
-  [users]
+(var- aquire-build-user-counter 0)
+(defn aquire-build-user
+  [cfg]
+  (def users (get cfg :build-users []))
   (when (empty? users)
-    (error "build user list empty empty"))
-  (defn select-and-lock-build-user2
+    (error "build user list empty, unable to build."))
+
+  (defn select-and-lock-build-user
     [users idx]
     (if (= idx (length users))
       (do
         # XXX exp backoff?
         (os/sleep 0.5)
-        (select-and-lock-build-user2 users 0))
+        (select-and-lock-build-user users 0))
       (let [u (users idx)]
         (if-let [user-lock (flock/acquire (string *store-path* "/lock/user-" u ".lock") :noblock :exclusive)]
           @{:user u :lock user-lock :close (fn [self] (:close (self :lock)))}
-          (select-and-lock-build-user2 users (inc idx))))))
-  (select-and-lock-build-user2 users 0))
+          (select-and-lock-build-user users (inc idx))))))
+  (def start-idx (mod (++ aquire-build-user-counter) (length users)))
+  (if (cfg :lock-build-users)
+    (select-and-lock-build-user users start-idx)
+    @{:user (users start-idx) :close (fn [self] nil)}))
 
 (defn- build-lock-cleanup
   []
@@ -384,7 +381,7 @@
           (unless (has-pkg dep)
             (build2 dep)))
 
-        (with [locked-user (select-and-lock-build-user (get cfg :build-users []))]
+        (with [build-user (aquire-build-user cfg)]
         (with [flock (flock/acquire (string *store-path* "/lock/build-" (pkg :hash) ".lock") :block :exclusive)]
           # After aquiring the package lock, check again that it doesn't exist.
           # This is in case multiple builders were waiting.
@@ -395,23 +392,49 @@
               (sh/$ ["rm" "-rf" (pkg :path)]))
             
             (sh/$ ["mkdir" (pkg :path)])
-            
-            (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
-            (def thunk-path (string tmpdir "/.pkg.thunk"))
-            
-            (defn do-build []
-              (os/cd tmpdir)
-              (with-dyns [:pkg-out (pkg :path)]
-                ((pkg :builder))))
 
-            (put registry (pkg :builder) nil)
-            (spit thunk-path (marshal do-build registry))
-            (put registry (pkg :builder) '*pkg-noop-build*)
+            (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
             (defer (do
                      (sh/$ ["chmod" "-R" "u+w" tmpdir])
                      (sh/$ ["rm" "-r" tmpdir]))
-              (sh/$ ["hermes-builder" "-t" thunk-path]))
+              
+              (def tmp (string tmpdir "/tmp"))
+              (def bin (string tmpdir "/bin"))
+              (def usr-bin (string tmpdir "/usr/bin"))
+              (def build (string tmpdir "/tmp/build"))
+              (def jail-store-path (string tmpdir *store-path*))
 
+              (sh/$ ["mkdir" "-p" build bin usr-bin jail-store-path])
+
+              (defn do-build []
+                (os/cd "/tmp/build")
+                (with-dyns [:pkg-out (pkg :path)]
+                  ((pkg :builder))))
+
+              (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
+              (put registry (pkg :builder) nil)
+              (spit thunk-path (marshal do-build registry))
+              (put registry (pkg :builder) '*pkg-noop-build*)
+
+              (sh/$ [
+                "nsjail"
+                "-M" "o"
+                "-q"
+                "--chroot" "/"
+                "--rlimit_as" "max"
+                "--rlimit_cpu" "max"
+                "--rlimit_fsize" "max"
+                "--rlimit_nofile" "max"
+                "--rlimit_nproc" "max"
+                "--rlimit_stack" "max"
+                ;(if (pkg :content) ["--disable_clone_newnet"] [])
+                "--bindmount" (string bin ":/bin")
+                "--bindmount" (string tmp ":/tmp")
+                "--bindmount_ro" (string *store-path* ":" *store-path*)
+                "--bindmount" (string (pkg :path) ":" (pkg :path))
+                "--user" (string (build-user :user))
+                # "--group" (string (build-user :group)) XXX TODO FIXME
+                "--" (string (sh/$$_ ["which" "hermes-builder"])) "-t" "/tmp/.pkg.thunk"])) # XXX don't shell out.
 
             (def scanned-refs (ref-scan db pkg))
             
