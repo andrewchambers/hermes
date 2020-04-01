@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-struct sha1_context {
+typedef struct Sha1ctx Sha1ctx;
+
+struct Sha1ctx {
     uint32_t h[5];
     unsigned char buf[64];
     short len;
@@ -9,6 +11,6 @@ struct sha1_context {
 };
 
 /* Exported functions. */
-void sha1_init(struct sha1_context *);
-void sha1_update(struct sha1_context *, char *, size_t);
-void sha1_final(struct sha1_context *, unsigned char * /* [20] */);
+void sha1_init(Sha1ctx *);
+void sha1_update(Sha1ctx *, char *, size_t);
+void sha1_final(Sha1ctx *, unsigned char * /* [20] */);

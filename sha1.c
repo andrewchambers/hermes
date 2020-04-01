@@ -54,7 +54,7 @@ lrot(uint32_t x, int count)
 #define F3 f = (b & c) | (b & d) | (c & d)
 
 static void
-munch(struct sha1_context *ctx, unsigned char *bytes)
+munch(Sha1ctx *ctx, unsigned char *bytes)
 {
     uint32_t w[80], *pw;
     uint32_t a, b, c, d, e, f, tmp;
@@ -244,7 +244,7 @@ munch(struct sha1_context *ctx, unsigned char *bytes)
 /* Exported functions. */
 
 void
-sha1_init(struct sha1_context *ctx)
+sha1_init(Sha1ctx *ctx)
 {
     memcpy(ctx->h, magic, sizeof magic);
     ctx->len = 0;
@@ -252,7 +252,7 @@ sha1_init(struct sha1_context *ctx)
 }
 
 void
-sha1_update(struct sha1_context *ctx, char *buf, size_t size)
+sha1_update(Sha1ctx *ctx, char *buf, size_t size)
 {
     size_t rem;
 
@@ -275,7 +275,7 @@ sha1_update(struct sha1_context *ctx, char *buf, size_t size)
     ctx->len += size;
 }
 
-void sha1_final(struct sha1_context *ctx, unsigned char *hash)
+void sha1_final(Sha1ctx *ctx, unsigned char *hash)
 {
     if (ctx->len >= 64) { /* This should not happen. */
         munch(ctx, ctx->buf);

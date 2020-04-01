@@ -155,6 +155,8 @@ const JanetAbstractType pkg_type = {
 static const JanetReg cfuns[] = {
     {"pkg", pkg, NULL},
     {"pkg-hash", pkg_hash, NULL},
+    {"sha256-dir-hash", sha256_dir_hash, NULL},
+    {"sha256-file-hash", sha256_file_hash, NULL},
     {"pkg-dependencies", pkg_dependencies, NULL},
     {"hash-scan", hash_scan, NULL},
     {NULL, NULL, NULL}

@@ -116,14 +116,15 @@ void hash_scan_path2(JanetString store_path, const char *path, JanetTable *hashe
         janet_panicf("unable to stat %s", path);
 
     if (S_ISLNK(statbuf.st_mode)) {
-        char lnkbuf[PATH_MAX];
-        ssize_t nchars = readlink((char *)path, lnkbuf, sizeof(lnkbuf));
+        char *lnkbuf = janet_smalloc(statbuf.st_size);
+        ssize_t nchars = readlink((char *)path, lnkbuf, statbuf.st_size);
         if (nchars < 0) {
             janet_panicf("unable to read link at %s", path);
         }
         Scanner s;
         init_scanner(&s, store_path, hashes);
         scan_buf(&s, lnkbuf, nchars);
+        janet_sfree(lnkbuf);
     } else if (S_ISREG(statbuf.st_mode)) {
         FILE **f = janet_smalloc(sizeof(FILE*));
         *f = NULL;

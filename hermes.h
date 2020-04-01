@@ -5,7 +5,7 @@
 /* types */
 
 typedef struct {
-    struct sha1_context sha1_ctx;
+    Sha1ctx sha1_ctx;
     JanetTable seen;
     JanetTable *rreg;
     JanetFuncEnv **seen_envs;
@@ -28,9 +28,14 @@ typedef struct {
 
 extern const JanetAbstractType pkg_type;
 
-/* pkg_hash.c */
+/* pkghash.c */
 
 Janet pkg_hash(int32_t argc, Janet *argv);
+
+/* pathhash.c */
+
+Janet sha256_dir_hash(int argc, Janet *argv);
+Janet sha256_file_hash(int argc, Janet *argv);
 
 /* hashscan.c */
 
@@ -39,6 +44,10 @@ Janet hash_scan(int32_t argc, Janet *argv);
 /* deps.c */
 
 Janet pkg_dependencies(int argc, Janet *argv);
+
+/* base16.c */
+
+void base16_encode(char *outbuf, char *inbuf, size_t in_length);
 
 /*  scratchvec.c */
 

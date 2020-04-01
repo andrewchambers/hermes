@@ -16,8 +16,10 @@
 
 (declare-native
   :name "_hermes"
-  :headers ["hermes.h" "sha1.h"]
-  :source ["hermes.c" "scratchvec.c" "sha1.c" "pkghash.c" "deps.c" "hashscan.c"])
+  :headers ["hermes.h" "sha1.h" "sha256.h"]
+  :source ["hermes.c" "scratchvec.c" "sha1.c" "sha256.c"
+           "pathhash.c" "pkghash.c" "deps.c" "hashscan.c"
+           "base16.c"])
 
 (declare-executable
   :name "hermes"

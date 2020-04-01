@@ -11,116 +11,72 @@
   [store-path]
   (set *store-path* (path/abspath store-path)))
 
-(defn check-content
+(defn check-pkg-content
   [base-path content]
 
   (defn- bad-content
     [msg]
     (return :check-content [:fail msg]))
 
-  (defn- check-file-hash
-    [path expected]
-    (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
-    
+  (defn- check-hash
+    [path expected is-dir]
     (def actual
       (match (string/split ":" expected)
         ["sha256" _]
-          (string "sha256:"
-            (->> [sha256sum-bin path]
-              (sh/$$)
-              (string)
-              (string/split " ")
-              (first)))
+          (string
+            "sha256:"
+            (if is-dir
+              (_hermes/sha256-dir-hash path)
+              (_hermes/sha256-file-hash path)))
         _ 
           (bad-content (string "unsupported hash format - " expected))))
       (unless (= expected actual)
         (bad-content (string "expected " path " to have hash " expected " but got " actual))))
 
-  (defn- check-dir-hash
-    [path expected]
-    
-    (def sha256sum-bin (comptime (string (sh/$$_ ["which" "sha256sum"]))))
-    
-    (defn dir-hash
-      [hasher path]
-      (def wd (os/cwd))
-      (defer (os/cd wd)
-        (os/cd path)
-        (sh/$$
-          (sh/pipeline [
-            ["find" "." "-print0"]
-            ["sort" "-z"]
-            ["tar"
-              "-c"
-              "-f" "-"
-              "--numeric-owner"
-              "--owner=0"
-              "--group=0"
-              "--mode=go-rwx,u-rw"
-              "--mtime=1970-01-01"
-              "--no-recursion"
-              "--null"
-              "--files-from" "-"]
-            hasher
-          ]))))
-
-      (def actual
-        (match (string/split ":" expected)
-          ["sha256" _]
-            (do
-              (def actual
-                (as-> [sha256sum-bin "-b" "-"] _
-                      (dir-hash _ path)
-                      (string/split " " _)
-                      (first _)))
-              (string "sha256:" actual))
-          _ 
-            (bad-content (string "unsupported hash format - " expected))))
-      (unless (= expected actual)
-        (bad-content (string/format "expected %v to have hash %s but got %s" path expected actual))))
-
-  (defn- check-content2
-    [path content &opt st ]
-    (default st (os/lstat path))
+  (defn- unify-dir-content
+    [dir-path content &opt st]
+    (default st (os/lstat dir-path))
     (unless st
-      (bad-content (string "expected content at " path)))
+      (bad-content (string "expected content at " dir-path)))
+    (unless (struct? content)
+      (bad-content (string "expected a directory descriptor struct at " dir-path)))
+    (unless (= (st :mode) :directory)
+      (bad-content (string "expected a directory at " dir-path)))
+    (def ents (os/dir dir-path))
+    (unless (= (length ents) (length content))
+      (bad-content (string (length ents) " directory entries, expected " (length content) " at " dir-path)))
+    (each ent-name ents
+      (def ent-path (string dir-path "/" ent-name))
+      (def ent-st (os/stat ent-path))
+      (def expected-mode (get (content ent-name) :mode :file))
+      (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
+      (unless (= (ent-st :mode) expected-mode)
+        (bad-content (string "expected " expected-mode " at " ent-path)))
+      (unless (= (ent-st :permissions) expected-perms)
+        (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (ent-st :permissions))))
+      (def subcontent (get (content ent-name) :content))
+      (case (ent-st :mode)
+        :directory
+          (if (string? subcontent)
+            (check-hash ent-path subcontent true)
+            (unify-dir-content ent-path subcontent))
+        :link
+          (unless (= subcontent (os/readlink ent-path))
+            (bad-content (string "link at " ent-path " expected to point to " subcontent)))
+        :file
+          (do
+            (unless (string? subcontent)
+              (bad-content (string "content at " ent-path " must be a hash, got: " subcontent)))
+            (check-hash ent-path subcontent false))
+        (bad-content (string "unexpected mode " (ent-st :mode) " at " ent-path)))))
+  
+  (prompt :check-content 
     (cond
       (string? content)
-        (case (st :mode)
-          :directory
-            (check-dir-hash path content)
-          :link
-            (unless (= content (os/readlink path))
-              (bad-content (string "link at " path " expected to point to " (content :content))))
-          :file
-            (check-file-hash path content)
-          (bad-content (string "unexpected mode " (st :mode) " at " path)))
+        (check-hash base-path content true)
       (struct? content)
-        (do
-          (unless (= (st :mode) :directory)
-            (bad-content (string "expected a directory at " path)))
-          (def ents (os/dir path))
-          (unless (= (length ents) (length content))
-            (bad-content (string (length ents) " directory entries, expected " (length content) " at " path)))
-          (each ent-name ents
-            (def ent-path (string path "/" ent-name))
-            (def st (os/stat ent-path))
-            (def expected-mode (get (content ent-name) :mode :file))
-            (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
-            (unless (= (st :mode) expected-mode)
-              (bad-content (string "expected " expected-mode " at " ent-path)))
-            (unless (= (st :permissions) expected-perms)
-              (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (st :permissions))))
-            
-            (let [subcontent (content ent-name)]
-              (unless (struct? subcontent)
-                (bad-content (string "content entry for " path " must be be a struct")))
-              (check-content2 ent-path (subcontent  :content) st))))
-
-      (bad-content (string "unsupported content type in content map: " (type content) " at " path))))
-
-  (prompt :check-content 
-    (check-content2 base-path content)
+        (unify-dir-content base-path content)
+      (error (string/format "package content must be a hash or directory description struct")))
     :ok))
 
 (defn- fetch
@@ -129,11 +85,11 @@
     (if (or (string/has-prefix? "." url)
             (string/has-prefix? "/" url))
       (do
-        (def tar-bin (comptime (string (sh/$$_ ["which" "readlink"]))))
-        (string "file://" (sh/$ ["readlink" "-f" url])))
+        (def readlink-bin (comptime (sh/$$_ ["which" "readlink"])))
+        (string "file://" (sh/$ [readlink-bin "-f" url])))
       url))
   (default dest (last (string/split "/" url)))
-  (def curl-bin (comptime (string (sh/$$_ ["which" "curl"]))))
+  (def curl-bin (comptime (sh/$$_ ["which" "curl"])))
   (sh/$ [curl-bin "-L" "-o" dest url])
   dest)
 
@@ -146,7 +102,7 @@
   (default nstrip 0)
   (unless (os/stat dest)
     (os/mkdir dest))
-  (def tar-bin (comptime (string (sh/$$_ ["which" "tar"]))))
+  (def tar-bin (comptime (sh/$$_ ["which" "tar"])))
   (sh/$ [tar-bin (string "--strip-components=" nstrip) "-avxf" path "-C" dest]))
 
 (def builder-env (make-env root-env))
@@ -393,7 +349,7 @@
             
             (sh/$ ["mkdir" (pkg :path)])
 
-            (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
+            (def tmpdir (sh/$$_ ["mktemp" "-d"]))
             (defer (do
                      (sh/$ ["chmod" "-R" "u+w" tmpdir])
                      (sh/$ ["rm" "-r" tmpdir]))
@@ -434,7 +390,7 @@
                 "--bindmount" (string (pkg :path) ":" (pkg :path))
                 "--user" (string (build-user :user))
                 # "--group" (string (build-user :group)) XXX TODO FIXME
-                "--" (string (sh/$$_ ["which" "hermes-builder"])) "-t" "/tmp/.pkg.thunk"])) # XXX don't shell out.
+                "--" (sh/$$_ ["which" "hermes-builder"]) "-t" "/tmp/.pkg.thunk"])) # XXX don't shell out.
 
             (def scanned-refs (ref-scan db pkg))
             
@@ -442,7 +398,7 @@
             (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
 
             (when-let [content (pkg :content)]
-              (match (check-content (pkg :path) content)
+              (match (check-pkg-content (pkg :path) content)
                 [:fail msg]
                   (error msg)))
 

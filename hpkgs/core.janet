@@ -1,8 +1,8 @@
 
-(def bootstrap
+(def bootstrap # XXX TODO rename bootstrap to seed.
   (pkg
     :content
-      "sha256:f6c56e84b78b7d1d57aa9c127b23b9fd5c729410b4ecad9012b0de5ab55649bd"
+      "sha256:e6007bc526a43bf43ba2fae2c05fa4d93620b4092d3b6e030e2dc1cd2a969d67"
     :builder
       (fn []
         (unpack
@@ -269,6 +269,8 @@
 
 (defn- install-musl-cross-make-gcc
   [post-extract post-install]
+  (unless (os/lstat "/bin/sh")
+    (os/symlink (string (dash :path) "/bin/dash") "/bin/sh"))
   (defn archive-path
         [src-pkg]
         (->> (src-pkg :path)
@@ -484,9 +486,7 @@
           :install-phase ,install-phase)
       ,src-pkg])))
 
-
-
 (defpkg janet
   :src-url "https://github.com/janet-lang/janet/archive/v1.7.0.tar.gz"
-  :src-hash "sha256:f48f2b1fd90fe347e356bf50339d6917cc12c61eb8dfe76d41a1b58b4e992c1f")
+  :src-hash "sha256:2a119f3a79b209a858864e73ca3efda57ac044df3c89762a31480bbea386d2a3")
 
