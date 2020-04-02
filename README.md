@@ -1,11 +1,11 @@
 # Hermes
 
-Hermes is a software environment manager.
-
-Hermes may be considered similar to a source package manager, but certainly
+Hermes is a software environment manager used for installing and uninstalling
+collections of software. Hermes may be considered similar to a package manager, but certainly
 works quite differently from traditional tools in this space.
-You could imagine it doing jobs similar to software like [homebrew](https://brew.sh/)
-or perhaps docker, but in a totally different way. For those who know
+
+Hermes helps with tasks similar to other tools like [homebrew](https://brew.sh/)
+or perhaps [docker](https://www.docker.com/), but in a totally different way. For those who know
 [Nix](https://nixos.org/) and [Guix](https://guix.gnu.org/), things will be familiar, but
 there are also some key differences.
 
@@ -26,8 +26,13 @@ Hermes also provides some nifty features:
 - Remote package builds.
 - Remote deployment.
 - Atomic upgrades and rollback.
+- and more...
 
-## Does this replace my language package manager like npm,jpm,cargo,pip... ?
+## What does using Hermes look like?
+
+Coming soon...
+
+## Does Hermes replace my language package manager like npm,jpm,cargo,pip... ?
 
 No.
 
@@ -40,7 +45,7 @@ During deployment of your software you can invoke these tools from within
 package definitions to build your software in a well defined sandbox.
 These packages can then be deployed to remote machines using 'hermes cp'.
 
-## Does this replace my system package manager?
+## Does Hermes replace my system package manager?
 
 Maybe.
 
@@ -51,6 +56,3 @@ within the hermes package store.
 Hermes does not care what other package managers you use, and does not install
 packages in the traditional ```/bin``` path so will not conflict with them.
 
-## What does using hermes look like?
-
-Coming soon...
