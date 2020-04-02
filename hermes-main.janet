@@ -1,9 +1,104 @@
 (import argparse)
 (import sh)
 (import process)
-(import ./hermes)
+(import ./build/_hermes)
 
 (var *store-path* "/hermes")
+
+(defn pkg
+  [&keys {
+    :builder builder
+    :name name
+    :content content
+    :force-refs force-refs
+    :extra-refs extra-refs
+    :weak-refs weak-refs
+  }]
+  (_hermes/pkg builder name content force-refs extra-refs weak-refs))
+
+(defn- save-process-env
+  []
+  {:cwd (os/cwd)
+   :environ (os/environ)})
+
+(defn- restore-process-env
+  [{:cwd cwd
+    :environ environ}]
+  (eachk k environ
+     (os/setenv k (environ k)))
+  (os/cd cwd))
+
+(defn- fetch
+  [url &opt dest]
+  (error "fetch is not supported while loading package definitions"))
+
+(defn- unpack
+  [path &opt &keys {
+    :dest dest
+    :strip nstrip
+  }]
+  (error "unpack is not supported while loading package definitions"))
+
+# TODO XXX This environment should be a sandbox, loading
+# packages should be effectively a pure operation. When the 
+# actual build takes place, we swap the sandbox stubs for the real implementaion.
+# TODO XXX load from .hpkg extension.
+
+(def pkg-loading-env (merge-into @{} root-env))
+(put pkg-loading-env 'pkg    @{:value pkg})
+(put pkg-loading-env 'fetch  @{:value fetch})
+(put pkg-loading-env 'unpack @{:value unpack})
+(put pkg-loading-env 'sh/$   @{:value sh/$})
+(put pkg-loading-env 'sh/$$  @{:value sh/$$})
+(put pkg-loading-env 'sh/$$_ @{:value sh/$$_})
+(put pkg-loading-env 'sh/$?  @{:value sh/$?})
+(def marshal-client-pkg-registry (invert (env-lookup pkg-loading-env)))
+
+(defn load-pkgs
+  [fpath]
+
+  (defn clear-table 
+    [t]
+    (each k (keys t) # don't mutate while iterating.
+      (put t k 0))
+    t)
+  
+  (defn clear-array
+    [a]
+    (array/remove a 0 (length a))
+    a)
+
+  (def saved-process-env (save-process-env)) # XXX shouldn't be needed with proper sandboxed env.
+  (def saved-root-env (merge-into @{} root-env))
+  (def saved-mod-paths (array ;module/paths))
+  (def saved-mod-cache (merge-into @{} module/cache))
+
+  (defer (do
+           (clear-table module/cache)
+           (merge-into module/cache saved-mod-cache)
+
+           (clear-array module/paths)
+           (array/concat module/paths saved-mod-paths)
+
+           (clear-table root-env)
+           (merge-into root-env saved-root-env)
+           
+           (restore-process-env saved-process-env))
+    
+    (clear-table root-env)
+    (merge-into root-env pkg-loading-env)
+
+    # Clear module cache.
+    (clear-table module/cache)
+    
+    # Remove all paths, to ensure hermetic package env.
+    (defn- check-. [x] (if (string/has-prefix? "." x) x))
+    (clear-array module/paths)
+    (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
+
+    # XXX it would be nice to not exit on error, but raise an error.
+    # this is easier for now though.
+    (dofile fpath :exit true)))
 
 (defn- unknown-command
   []
@@ -76,7 +171,7 @@
   
   (def env 
     (if (parsed-args "module")
-      (hermes/load-pkgs (parsed-args "module"))
+      (load-pkgs (parsed-args "module"))
       root-env))
 
   (def pkg (eval-string-in-env (get parsed-args "expression" "default-pkg") env ))
@@ -91,7 +186,7 @@
       
       (def pkg-path (string tmpdir "/hermes-build.pkg"))
       
-      (spit pkg-path (marshal pkg hermes/marshal-client-pkg-registry))
+      (spit pkg-path (marshal pkg marshal-client-pkg-registry))
       
       (def pkgstore-cmd @["hermes-pkgstore" "build" "-s" *store-path* "-p" pkg-path])
       

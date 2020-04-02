@@ -1,5 +1,6 @@
 (import argparse)
-(import ./hermes)
+(import ./pkgstore)
+(import ./builder)
 
 (defn- unknown-command
   []
@@ -19,8 +20,8 @@
   (def parsed-args (argparse/argparse ;init-params))
   (unless parsed-args
     (os/exit 1))
-  (hermes/set-store-path (parsed-args "store"))
-  (hermes/init-store))
+  (pkgstore/set-store-path (parsed-args "store"))
+  (pkgstore/init-store))
 
 (def- build-params
   ["Build a marshalled package."
@@ -50,16 +51,16 @@
   (unless parsed-args
     (os/exit 1))
   
-  (hermes/set-store-path (parsed-args "store"))
+  (pkgstore/set-store-path (parsed-args "store"))
 
-  (def pkg (unmarshal (slurp (parsed-args "package")) hermes/builder-load-registry))
+  (def pkg (unmarshal (slurp (parsed-args "package")) builder/builder-load-registry))
 
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "pkg did did not return a valid package, got %v" pkg)))
 
   (def out-link (unless (parsed-args "no-out-link") (parsed-args "output")))
 
-  (hermes/build pkg out-link)
+  (pkgstore/build pkg out-link)
   
   (print (pkg :path)))
 
@@ -76,8 +77,8 @@
   (def parsed-args (argparse/argparse ;gc-params))
   (unless parsed-args
     (os/exit 1))
-  (hermes/set-store-path (parsed-args "store"))
-  (hermes/gc))
+  (pkgstore/set-store-path (parsed-args "store"))
+  (pkgstore/gc))
 
 (defn main
   [&]

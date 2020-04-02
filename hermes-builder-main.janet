@@ -1,5 +1,5 @@
 (import argparse)
-(import ./hermes)
+(import ./builder)
 
 (def- params
   ["Run a marshalled hermes thunk."
@@ -15,4 +15,4 @@
   (unless parsed-args
     (os/exit 1))
   
-  ((unmarshal (slurp (parsed-args "thunk")) hermes/builder-load-registry)))
+  ((unmarshal (slurp (parsed-args "thunk")) builder/builder-load-registry)))

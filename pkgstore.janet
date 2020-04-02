@@ -1,8 +1,9 @@
 (import sh)
 (import sqlite3)
+(import path)
 (import flock)
 (import jdn)
-(import path)
+(import ./builder)
 (import ./build/_hermes :as _hermes)
 
 (var- *store-path* "/hermes")
@@ -10,196 +11,6 @@
 (defn set-store-path
   [store-path]
   (set *store-path* (path/abspath store-path)))
-
-(defn check-pkg-content
-  [base-path content]
-
-  (defn- bad-content
-    [msg]
-    (return :check-content [:fail msg]))
-
-  (defn- check-hash
-    [path expected is-dir]
-    (def actual
-      (match (string/split ":" expected)
-        ["sha256" _]
-          (string
-            "sha256:"
-            (if is-dir
-              (_hermes/sha256-dir-hash path)
-              (_hermes/sha256-file-hash path)))
-        _ 
-          (bad-content (string "unsupported hash format - " expected))))
-      (unless (= expected actual)
-        (bad-content (string "expected " path " to have hash " expected " but got " actual))))
-
-  (defn- unify-dir-content
-    [dir-path content &opt st]
-    (default st (os/lstat dir-path))
-    (unless st
-      (bad-content (string "expected content at " dir-path)))
-    (unless (struct? content)
-      (bad-content (string "expected a directory descriptor struct at " dir-path)))
-    (unless (= (st :mode) :directory)
-      (bad-content (string "expected a directory at " dir-path)))
-    (def ents (os/dir dir-path))
-    (unless (= (length ents) (length content))
-      (bad-content (string (length ents) " directory entries, expected " (length content) " at " dir-path)))
-    (each ent-name ents
-      (def ent-path (string dir-path "/" ent-name))
-      (def ent-st (os/stat ent-path))
-      (def expected-mode (get (content ent-name) :mode :file))
-      (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
-      (unless (= (ent-st :mode) expected-mode)
-        (bad-content (string "expected " expected-mode " at " ent-path)))
-      (unless (= (ent-st :permissions) expected-perms)
-        (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (ent-st :permissions))))
-      (def subcontent (get (content ent-name) :content))
-      (case (ent-st :mode)
-        :directory
-          (if (string? subcontent)
-            (check-hash ent-path subcontent true)
-            (unify-dir-content ent-path subcontent))
-        :link
-          (unless (= subcontent (os/readlink ent-path))
-            (bad-content (string "link at " ent-path " expected to point to " subcontent)))
-        :file
-          (do
-            (unless (string? subcontent)
-              (bad-content (string "content at " ent-path " must be a hash, got: " subcontent)))
-            (check-hash ent-path subcontent false))
-        (bad-content (string "unexpected mode " (ent-st :mode) " at " ent-path)))))
-  
-  (prompt :check-content 
-    (cond
-      (string? content)
-        (check-hash base-path content true)
-      (struct? content)
-        (unify-dir-content base-path content)
-      (error (string/format "package content must be a hash or directory description struct")))
-    :ok))
-
-(defn- fetch
-  [url &opt dest]
-  (def url
-    (if (or (string/has-prefix? "." url)
-            (string/has-prefix? "/" url))
-      (do
-        (def readlink-bin (comptime (sh/$$_ ["which" "readlink"])))
-        (string "file://" (sh/$ [readlink-bin "-f" url])))
-      url))
-  (default dest (last (string/split "/" url)))
-  (def curl-bin (comptime (sh/$$_ ["which" "curl"])))
-  (sh/$ [curl-bin "-L" "-o" dest url])
-  dest)
-
-(defn- unpack
-  [path &opt &keys {
-    :dest dest
-    :strip nstrip
-  }]
-  (default dest "./")
-  (default nstrip 0)
-  (unless (os/stat dest)
-    (os/mkdir dest))
-  (def tar-bin (comptime (sh/$$_ ["which" "tar"])))
-  (sh/$ [tar-bin (string "--strip-components=" nstrip) "-avxf" path "-C" dest]))
-
-(def builder-env (make-env root-env))
-(put builder-env 'pkg
-  @{:value (fn [&] (error "pkg cannot be invoked inside a builder"))})
-(put builder-env 'fetch  @{:value fetch})
-(put builder-env 'unpack @{:value unpack})
-(put builder-env 'sh/$   @{:value sh/$})
-(put builder-env 'sh/$$  @{:value sh/$$})
-(put builder-env 'sh/$$_ @{:value sh/$$_})
-(put builder-env 'sh/$?  @{:value sh/$?})
-(put builder-env '*pkg-noop-build* (fn [&] nil))
-(def builder-load-registry (env-lookup builder-env))
-(def builder-registry (invert builder-load-registry))
-
-(defn pkg-hash
-  [pkg]
-  (_hermes/pkg-hash *store-path* builder-registry pkg))
-
-(defn pkg
-  [&keys {
-    :builder builder
-    :name name
-    :content content
-    :force-refs force-refs
-    :extra-refs extra-refs
-    :weak-refs weak-refs
-  }]
-  (_hermes/pkg builder name content force-refs extra-refs weak-refs))
-
-(defn- save-process-env
-  []
-  {:cwd (os/cwd)
-   :environ (os/environ)})
-
-(defn- restore-process-env
-  [{:cwd cwd
-    :environ environ}]
-  (eachk k environ
-     (os/setenv k (environ k)))
-  (os/cd cwd))
-
-(def pkg-loading-env (merge-into @{} root-env))
-(put pkg-loading-env 'pkg    @{:value pkg})
-(put pkg-loading-env 'fetch  @{:value fetch})
-(put pkg-loading-env 'unpack @{:value unpack})
-(put pkg-loading-env 'sh/$   @{:value sh/$})
-(put pkg-loading-env 'sh/$$  @{:value sh/$$})
-(put pkg-loading-env 'sh/$$_ @{:value sh/$$_})
-(put pkg-loading-env 'sh/$?  @{:value sh/$?})
-(def marshal-client-pkg-registry (invert (env-lookup pkg-loading-env)))
-
-(defn load-pkgs
-  [fpath]
-
-  (defn clear-table 
-    [t]
-    (each k (keys t) # don't mutate while iterating.
-      (put t k 0))
-    t)
-  
-  (defn clear-array
-    [a]
-    (array/remove a 0 (length a))
-    a)
-
-  (def saved-process-env (save-process-env)) # XXX shouldn't be needed with proper sandboxed env.
-  (def saved-root-env (merge-into @{} root-env))
-  (def saved-mod-paths (array ;module/paths))
-  (def saved-mod-cache (merge-into @{} module/cache))
-
-  (defer (do
-           (clear-table module/cache)
-           (merge-into module/cache saved-mod-cache)
-
-           (clear-array module/paths)
-           (array/concat module/paths saved-mod-paths)
-
-           (clear-table root-env)
-           (merge-into root-env saved-root-env)
-           
-           (restore-process-env saved-process-env))
-    
-    (clear-table root-env)
-    (merge-into root-env pkg-loading-env)
-
-    # Clear module cache.
-    (clear-table module/cache)
-    
-    # Remove all paths, to ensure hermetic package env.
-    (defn- check-. [x] (if (string/has-prefix? "." x) x))
-    (clear-array module/paths)
-    (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
-
-    # XXX it would be nice to not exit on error, but raise an error.
-    # this is easier for now though.
-    (dofile fpath :exit true)))
 
 (defn init-store
   [&opt path]
@@ -226,10 +37,6 @@
       (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
       (sqlite3/eval db "commit;")))
   nil)
-
-(defn load-store-config
-  []
-  (jdn/decode (slurp (string *store-path* "/cfg.jdn"))))
 
 (defn compute-build-dep-info
   [pkg]
@@ -306,22 +113,91 @@
   [db hash]
   (not (empty? (sqlite3/eval db "select 1 from Pkgs where Hash=:hash" {:hash hash}))))
 
+
+(defn check-pkg-content
+  [base-path content]
+
+  (defn- bad-content
+    [msg]
+    (return :check-content [:fail msg]))
+
+  (defn- check-hash
+    [path expected is-dir]
+    (def actual
+      (match (string/split ":" expected)
+        ["sha256" _]
+          (string
+            "sha256:"
+            (if is-dir
+              (_hermes/sha256-dir-hash path)
+              (_hermes/sha256-file-hash path)))
+        _ 
+          (bad-content (string "unsupported hash format - " expected))))
+      (unless (= expected actual)
+        (bad-content (string "expected " path " to have hash " expected " but got " actual))))
+
+  (defn- unify-dir-content
+    [dir-path content &opt st]
+    (default st (os/lstat dir-path))
+    (unless st
+      (bad-content (string "expected content at " dir-path)))
+    (unless (struct? content)
+      (bad-content (string "expected a directory descriptor struct at " dir-path)))
+    (unless (= (st :mode) :directory)
+      (bad-content (string "expected a directory at " dir-path)))
+    (def ents (os/dir dir-path))
+    (unless (= (length ents) (length content))
+      (bad-content (string (length ents) " directory entries, expected " (length content) " at " dir-path)))
+    (each ent-name ents
+      (def ent-path (string dir-path "/" ent-name))
+      (def ent-st (os/stat ent-path))
+      (def expected-mode (get (content ent-name) :mode :file))
+      (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
+      (unless (= (ent-st :mode) expected-mode)
+        (bad-content (string "expected " expected-mode " at " ent-path)))
+      (unless (= (ent-st :permissions) expected-perms)
+        (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (ent-st :permissions))))
+      (def subcontent (get (content ent-name) :content))
+      (case (ent-st :mode)
+        :directory
+          (if (string? subcontent)
+            (check-hash ent-path subcontent true)
+            (unify-dir-content ent-path subcontent))
+        :link
+          (unless (= subcontent (os/readlink ent-path))
+            (bad-content (string "link at " ent-path " expected to point to " subcontent)))
+        :file
+          (do
+            (unless (string? subcontent)
+              (bad-content (string "content at " ent-path " must be a hash, got: " subcontent)))
+            (check-hash ent-path subcontent false))
+        (bad-content (string "unexpected mode " (ent-st :mode) " at " ent-path)))))
+  
+  (prompt :check-content 
+    (cond
+      (string? content)
+        (check-hash base-path content true)
+      (struct? content)
+        (unify-dir-content base-path content)
+      (error (string/format "package content must be a hash or directory description struct")))
+    :ok))
+
 (defn build
   [pkg &opt root]
 
-  (def cfg (load-store-config))
+  (def cfg (jdn/decode (slurp (string *store-path* "/cfg.jdn"))))
 
   (def dep-info (compute-build-dep-info pkg))
 
   # Copy registry so we can update it as we build packages.
-  (def registry (merge-into @{} builder-registry))
+  (def registry (merge-into @{} builder/builder-registry))
   
   (each p (dep-info :order)
     (put registry (p :builder) '*pkg-noop-build*))
 
   (each p (dep-info :order)
     # Hash the packages in order as children must be hashed first.
-    (pkg-hash p))
+    (_hermes/pkg-hash *store-path* builder/builder-registry p))
 
   (with [flock (flock/acquire (string *store-path* "/lock/gc.lock") :block :shared)]
   (with [db (sqlite3/open (string *store-path* "/hermes.db"))]
@@ -513,4 +389,3 @@
     (build-lock-cleanup)
 
     nil)))
-
