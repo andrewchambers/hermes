@@ -59,7 +59,9 @@ $ ./my-env/bin/ls -la
 - The requested package gets it's gc-root/link installed into the pkg store database and created on disk.
 
 
-## Code overview
+## Source overview
+
+src/*
 
 - hermes-main.janet is the main entry point a user interacts with.
 
@@ -70,4 +72,4 @@ $ ./my-env/bin/ls -la
 
 - builder.janet defines the build environment of packages.
 
-... Other files too.
+... Other files...
