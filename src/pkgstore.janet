@@ -4,7 +4,7 @@
 (import flock)
 (import jdn)
 (import ./builder)
-(import ./build/_hermes :as _hermes)
+(import ../build/_hermes :as _hermes)
 
 (var- *store-path* "/hermes")
 

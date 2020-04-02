@@ -16,19 +16,27 @@
 
 (declare-native
   :name "_hermes"
-  :headers ["hermes.h" "sha1.h" "sha256.h"]
-  :source ["hermes.c" "scratchvec.c" "sha1.c" "sha256.c"
-           "pathhash.c" "pkghash.c" "deps.c" "hashscan.c"
-           "base16.c"])
+  :headers ["src/hermes.h"
+            "src/sha1.h"
+            "src/sha256.h"]
+  :source ["src/hermes.c"
+           "src/scratchvec.c"
+           "src/sha1.c"
+           "src/sha256.c"
+           "src/pathhash.c"
+           "src/pkghash.c"
+           "src/deps.c"
+           "src/hashscan.c"
+           "src/base16.c"])
 
 (declare-executable
   :name "hermes"
-  :entry "hermes-main.janet")
+  :entry "src/hermes-main.janet")
 
 (declare-executable
   :name "hermes-pkgstore"
-  :entry "hermes-pkgstore-main.janet")
+  :entry "src/hermes-pkgstore-main.janet")
 
 (declare-executable
   :name "hermes-builder"
-  :entry "hermes-builder-main.janet")
+  :entry "src/hermes-builder-main.janet")

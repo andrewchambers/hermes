@@ -1,7 +1,7 @@
 (import argparse)
 (import sh)
 (import process)
-(import ./build/_hermes)
+(import ../build/_hermes)
 
 (var *store-path* "/hermes")
 
