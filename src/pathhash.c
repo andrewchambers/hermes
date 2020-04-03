@@ -1,4 +1,4 @@
-#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200112L
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -121,6 +121,7 @@ dir_hash(Hasher *h, const char *fpath)
             /* hashed above */
             break;
         case FTS_F: {
+            hasher_add_byte(h, 1);
             hasher_add(h, fent->fts_name, fent->fts_namelen);
             hasher_add_int32(h, fent->fts_level);
             hasher_add_int32(h, fent->fts_statp->st_mode & 0111);
@@ -129,6 +130,7 @@ dir_hash(Hasher *h, const char *fpath)
             break;
         }
         case FTS_SL: {
+            hasher_add_byte(h, 2);
             char *lnkbuf = janet_smalloc(fent->fts_statp->st_size);
             ssize_t nchars = readlink((char *)fent->fts_accpath, lnkbuf, fent->fts_statp->st_size);
             if (nchars < 0)

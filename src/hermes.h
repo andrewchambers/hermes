@@ -70,3 +70,15 @@ void base16_encode(char *outbuf, char *inbuf, size_t in_length);
 void *scratch_v_grow(void *v, int32_t increment, int32_t itemsize);
 void *scratch_v_flattenmem(void *v, int32_t itemsize);
 
+/* os.c */
+
+Janet jgetpwnam(int argc, Janet *argv);
+Janet jgetpwuid(int argc, Janet *argv);
+Janet jsetuid(int argc, Janet *argv);
+Janet jseteuid(int argc, Janet *argv);
+Janet jgetuid(int argc, Janet *argv);
+Janet jgeteuid(int argc, Janet *argv);
+Janet jgetgid(int argc, Janet *argv);
+Janet jgetegid(int argc, Janet *argv);
+
+

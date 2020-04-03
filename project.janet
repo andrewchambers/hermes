@@ -27,7 +27,8 @@
            "src/pkghash.c"
            "src/deps.c"
            "src/hashscan.c"
-           "src/base16.c"])
+           "src/base16.c"
+           "src/os.c"])
 
 (declare-executable
   :name "hermes"
