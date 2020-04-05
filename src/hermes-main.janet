@@ -3,7 +3,7 @@
 (import process)
 (import ../build/_hermes)
 
-(var *store-path* "/hermes")
+(var *store-path* "")
 
 (defn pkg
   [&keys {
@@ -139,8 +139,10 @@
   (def parsed-args (argparse/argparse ;init-params))
   (unless parsed-args
     (os/exit 1))
-
-  (def pkgstore-cmd @["hermes-pkgstore" "init" "-s" *store-path*])
+  (def pkgstore-cmd @[
+    "hermes-pkgstore"
+    "init" "-s" *store-path*
+  ])
   (os/exit (process/run pkgstore-cmd)))
 
 (def- build-params
@@ -213,7 +215,7 @@
 (defn main
   [&]
   (def args (dyn :args))
-  (set *store-path* (os/getenv "HERMES_STORE" *store-path*))
+  (set *store-path* (os/getenv "HERMES_STORE" ""))
   (with-dyns [:args (array/slice args 1)]
     (match args
       [_ "init"] (init)

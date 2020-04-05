@@ -448,11 +448,11 @@ static Janet make_pkg_path(JanetString store_path, JanetString hash, Janet name)
         name_len = janet_string_length(name_str);
     }
 
-    size_t prefix_sz = janet_string_length(store_path) + 5;
+    size_t prefix_sz = janet_string_length(store_path) + 6;
     size_t ntmp = prefix_sz + janet_string_length(hash) + (name_str ? name_len + 1 : 0);
     uint8_t *tmp = alloca(ntmp);
     memcpy(tmp, store_path, janet_string_length(store_path));
-    memcpy(tmp + janet_string_length(store_path), "/pkg/", 5);
+    memcpy(tmp + janet_string_length(store_path), "/hpkg/", 6);
     uint8_t *hashout = tmp + prefix_sz;
     size_t hash_len = janet_string_length(hash);
     memcpy(hashout, hash, hash_len);

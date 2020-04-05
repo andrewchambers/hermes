@@ -2,7 +2,7 @@
 (def bootstrap # XXX TODO rename bootstrap to seed.
   (pkg
     :content
-      "sha256:e6007bc526a43bf43ba2fae2c05fa4d93620b4092d3b6e030e2dc1cd2a969d67"
+      "sha256:ff3ee8561ffe6f5845278eb605a98d314e1aa1c3de999c079038b268e72f240b"
     :builder
       (fn []
         (unpack

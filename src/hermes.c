@@ -163,7 +163,7 @@ static const JanetReg cfuns[] = {
     {"getpwuid", jgetpwuid, NULL},
     {"getuid", jgetuid, NULL},
     {"geteuid", jgeteuid, NULL},
-    {"setuid", jsetuid, NULL},
+    {"setuid", jseteuid, NULL},
     {"seteuid", jseteuid, NULL},
     {NULL, NULL, NULL}
 };

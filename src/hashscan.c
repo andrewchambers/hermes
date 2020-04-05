@@ -31,10 +31,18 @@ static void init_scanner(Scanner *s, JanetString store_path, JanetTable *hashes)
 }
 
 static void scan_buf(Scanner *s, char *buf, size_t n) {
+    static char prefix2[6] = "/hpkg/";
+
     for (size_t i = 0; i < n; i++) {
 again:
         switch (s->state) {
         case ST_PREFIX1:
+            if (!s->store_path_len) {
+                /* If the store path is "", then nothing to do. */
+                s->n_matched = 0;
+                s->state = ST_PREFIX2;
+                goto again;
+            }
             if (buf[i] == s->store_path[s->n_matched]) {
                 s->n_matched++;
             } else {
@@ -47,14 +55,14 @@ again:
             }
             break;
         case ST_PREFIX2: {
-            if (buf[i] == ("/pkg/"[s->n_matched])) {
+            if (buf[i] == (prefix2[s->n_matched])) {
                 s->n_matched++;
             } else {
                 s->n_matched = 0;
                 s->state = ST_PREFIX1;
                 goto again;
             }
-            if (s->n_matched == 5) {
+            if (s->n_matched == sizeof(prefix2)) {
                 s->n_matched = 0;
                 s->state = ST_HASH;
             }
