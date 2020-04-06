@@ -429,7 +429,7 @@
 
               (def do-build 
                 # This awkward wrapper is related to the janet
-                # internals, we want a detatched env with as few
+                # internals, we want a detached env with as few
                 # slots referenced as possible.
                 (do
                   (defn make-builder [pkg]
