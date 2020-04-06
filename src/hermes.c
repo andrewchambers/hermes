@@ -161,10 +161,13 @@ static const JanetReg cfuns[] = {
     {"hash-scan", hash_scan, NULL},
     {"getpwnam", jgetpwnam, NULL},
     {"getpwuid", jgetpwuid, NULL},
+    {"getgid", jgetgid, NULL},
+    {"getegid", jgetegid, NULL},
     {"getuid", jgetuid, NULL},
     {"geteuid", jgeteuid, NULL},
     {"setuid", jseteuid, NULL},
     {"seteuid", jseteuid, NULL},
+    {"setegid", jsetegid, NULL},
     {NULL, NULL, NULL}
 };
 

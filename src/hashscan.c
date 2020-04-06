@@ -59,8 +59,10 @@ again:
                 s->n_matched++;
             } else {
                 s->n_matched = 0;
-                s->state = ST_PREFIX1;
-                goto again;
+                if (s->store_path_len) {
+                    s->state = ST_PREFIX1;
+                    goto again;
+                }
             }
             if (s->n_matched == sizeof(prefix2)) {
                 s->n_matched = 0;
@@ -185,8 +187,6 @@ Janet hash_scan(int argc, Janet *argv) {
         janet_panic("package does not have a valid path");
     JanetString path = janet_unwrap_string(pkg->path);
     JanetTable *hashes = janet_gettable(argv, 2);
-    if (janet_string_length(store_path) == 0)
-        janet_panic("unable to scan for empty store path");
     hash_scan_path2(store_path, (const char *)path, hashes, 0);
     janet_table_put(hashes, pkg->path, janet_wrap_nil());
     return janet_wrap_table(hashes);

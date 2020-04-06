@@ -7,6 +7,13 @@
   (eprint (string ;args))
   (os/exit 1))
 
+(defn drop-setuid+setgid-privs
+  []
+  (def uid (_hermes/getuid))
+  (def gid (_hermes/getgid))
+  (_hermes/seteuid uid)
+  (_hermes/setegid gid))
+
 (defn- unknown-command
   []
   (die
@@ -25,8 +32,7 @@
   # N.B.
   # Because we support installing the pkgstore as setuid root.
   # We must always perform init as the real user.
-  (def uid (_hermes/getuid))
-  (_hermes/seteuid uid)
+  (drop-setuid+setgid-privs)
 
   (def parsed-args (argparse/argparse ;init-params))
   (unless parsed-args
@@ -72,8 +78,7 @@
   # N.B. If it is a single user store, we must drop privileges
   # to avoid excess privileges when pkgstore is setuid root.
   (unless (= store "")
-    (def uid (_hermes/getuid))
-    (_hermes/seteuid uid))
+    (drop-setuid+setgid-privs))
 
   (pkgstore/open-pkg-store store)
 
@@ -108,8 +113,7 @@
   # N.B. If it is a single user store, we must drop privileges
   # to avoid excess privileges when pkgstore is setuid root.
   (unless (= store "")
-    (def uid (_hermes/getuid))
-    (_hermes/seteuid uid))
+    (drop-setuid+setgid-privs))
 
   (pkgstore/open-pkg-store (parsed-args "store"))
 

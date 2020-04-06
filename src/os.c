@@ -78,3 +78,10 @@ Janet jseteuid(int argc, Janet *argv) {
         janet_panicf("unable to set effective user id - %s", strerror(errno));
     return janet_wrap_nil();
 }
+
+Janet jsetegid(int argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+    if (setegid(janet_getinteger(argv, 0)) != 0)
+        janet_panicf("unable to set effective group id - %s", strerror(errno));
+    return janet_wrap_nil();
+}

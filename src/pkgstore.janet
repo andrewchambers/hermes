@@ -19,6 +19,7 @@
   
   (def uid (_hermes/getuid))
   (def euid (_hermes/geteuid))
+  (def egid (_hermes/getegid))
   
   # setuid mode should only be used for a multi-user store
   # at the root path. We cannot allow non root users to
@@ -50,7 +51,11 @@
         (unless (cfg-stat :uid)
           (error "multi-user store must be root owned"))
         (unless (= euid 0)
-          (error "euid must be root when opening a multi-user store")))
+          (error "euid must be root when opening a multi-user store"))
+        (unless (= egid 0)
+          (error "egid must be root when opening a multi-user store"))
+        # XXX TODO check if uid is in authorized group.
+        )
     (error "store has bad :mode value in package store config.")))
 
 (defn init-store
@@ -103,9 +108,9 @@
           (def cfg
             (string
               "{\n"
-              "  :mode :multi-user"
+              "  :mode :multi-user\n"
               "  :sandbox-build-users [\n"
-              "    " (map |(string "hermes_build_user" $) (range 9)) "\n"
+              "    " (string/join (map |(string/format "%j" (string "hermes_build_user" $)) (range 9)) "\n    ") "\n"
               "  ]\n"
               "  :authorized-groups [\n"
               "    \"hermes_users\"\n"
@@ -126,7 +131,7 @@
 
   nil)
 
-(defn path-to-pkg-parts
+(defn- path-to-pkg-parts
   [path]
   (def tail-peg (comptime (peg/compile ~{
     :hash (capture (repeat 40 (choice (range "09") (range "af"))))
@@ -156,12 +161,13 @@
     (build-lock-cleanup)
     (:close gc-lock)))
 
-(defn has-pkg-with-hash
+(defn- has-pkg-with-hash
   [db hash]
   (not (empty? (sqlite3/eval db "select 1 from Pkgs where Hash=:hash" {:hash hash}))))
 
 (defn gc
   []
+  (assert *store-config*)
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :exclusive)]
   (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
 
@@ -221,7 +227,7 @@
 
     nil)))
 
-(defn check-pkg-content
+(defn- check-pkg-content
   [base-path content]
 
   (defn- bad-content
@@ -289,7 +295,7 @@
       (error (string/format "package content must be a hash or directory description struct")))
     :ok))
 
-(defn compute-build-dep-info
+(defn- compute-build-dep-info
   [pkg]
   (def deps @{})
   (def order @[])
@@ -306,7 +312,7 @@
   {:deps deps
    :order order})
 
-(defn ref-scan
+(defn- ref-scan
   [db pkg]
   # Because package names are not fixed length, the scanner can only scan for hashes. 
   # We must reconstruct the full package path by fetching from the database.
@@ -320,7 +326,7 @@
   refs)
 
 (var- aquire-build-user-counter 0)
-(defn aquire-build-user
+(defn- aquire-build-user
   []
   (defn select-and-lock-build-user
     [users idx]
@@ -342,8 +348,17 @@
     (merge-into (_hermes/getpwuid (_hermes/getuid))
                 @{:close (fn [self] nil)})))
 
+(defn- find-builder-bin
+  []
+  (def self (os/readlink "/proc/self/exe"))
+  (def basename (path/basename self))
+  (path/join (string/slice self 0 (- -1 (length basename))) "hermes-builder"))
+
 (defn build
   [pkg &opt gc-root]
+  (assert *store-config*)
+
+  (def store-mode (*store-config* :mode))
 
   (def dep-info (compute-build-dep-info pkg))
 
@@ -383,7 +398,7 @@
             
             (sh/$ ["mkdir" (pkg :path)])
 
-            (when (= (*store-config* :mode) :single-user)
+            (when (= store-mode :single-user)
               # XXX FIXME. We set the permissions to 777
               # during a single user build to ensure the 
               # sandbox user can actually write to it. 
@@ -402,14 +417,27 @@
               (def usr-bin (string tmpdir "/usr/bin"))
               (def tmp (string tmpdir "/tmp"))
               (def build (string tmpdir "/tmp/build"))
-              (def hpkg-path (string *store-path* "/hpkg"))
 
               (sh/$ ["mkdir" "-p" build bin usr-bin])
 
-              (defn do-build []
-                (os/cd "/tmp/build")
-                (with-dyns [:pkg-out (pkg :path)]
-                  ((pkg :builder))))
+              (when (= store-mode :multi-user)
+                # Paths that need to be owned by the build user.
+                (sh/$ [
+                  "chown"
+                  (string (build-user :uid) ":" (build-user :gid))
+                  bin build usr-bin tmp (pkg :path)]))
+
+              (def do-build 
+                # This awkward wrapper is related to the janet
+                # internals, we want a detatched env with as few
+                # slots referenced as possible.
+                (do
+                  (defn make-builder [pkg]
+                    (fn do-build []
+                      (os/cd "/tmp/build")
+                      (with-dyns [:pkg-out (pkg :path)]
+                        ((pkg :builder)))))
+                  (make-builder pkg)))
 
               (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
               (put registry (pkg :builder) nil)
@@ -427,16 +455,26 @@
                 "--rlimit_nofile" "max"
                 "--rlimit_nproc" "max"
                 "--rlimit_stack" "max"
+                # In multi user mode we don't use user namespaces.
+                # Instead we isolate via locked build users.
+                ;(if (= store-mode :multi-user) ["--disable_clone_newuser"] [])
                 ;(if (pkg :content) ["--disable_clone_newnet"] [])
                 "--bindmount" (string bin ":/bin")
                 "--bindmount" (string tmp ":/tmp")
-                "--bindmount" (string hpkg-path ":" hpkg-path)
+                "--bindmount" (let [hpkg-path (string *store-path* "/hpkg")]
+                                (string hpkg-path ":" hpkg-path))
                 "--user" (string (build-user :uid))
                 "--group" (string (build-user :gid))
-                "--" (sh/$$_ ["which" "hermes-builder"]) "-t" "/tmp/.pkg.thunk"])) # XXX don't shell out.
+                "--" (find-builder-bin) "-t" "/tmp/.pkg.thunk"]))
 
             (def scanned-refs (ref-scan db pkg))
-            
+
+            # Restore package owner.
+            (when (= store-mode :multi-user)
+              # Assuming our sandbox is strong, no processes from the locked build user are currently
+              # running, so they cannot be manipulating the build dir at this point in time.
+              (sh/$ ["chown" "-R" "0:0" (pkg :path)]))
+
             # Set package permissions.
             (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
 

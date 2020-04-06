@@ -76,6 +76,7 @@ Janet jgetpwnam(int argc, Janet *argv);
 Janet jgetpwuid(int argc, Janet *argv);
 Janet jsetuid(int argc, Janet *argv);
 Janet jseteuid(int argc, Janet *argv);
+Janet jsetegid(int argc, Janet *argv);
 Janet jgetuid(int argc, Janet *argv);
 Janet jgeteuid(int argc, Janet *argv);
 Janet jgetgid(int argc, Janet *argv);
