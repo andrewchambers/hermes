@@ -54,8 +54,16 @@
           (error "euid must be root when opening a multi-user store"))
         (unless (= egid 0)
           (error "egid must be root when opening a multi-user store"))
-        # XXX TODO check if uid is in authorized group.
-        )
+        
+        (let [user-name ((_hermes/getpwuid uid) :name)
+              authorized-group-info (_hermes/getgrnam (get *store-config* :authorized-group "root"))]
+          (unless (or (= "root" user-name)
+                      (find  |(= $ user-name) (authorized-group-info :members)))
+            (error 
+              (string/format "current user %v not in the authorized group %v (see %v)"
+                user-name
+                (authorized-group-info :name)
+                cfg-path)))))
     (error "store has bad :mode value in package store config.")))
 
 (defn init-store
@@ -109,11 +117,9 @@
             (string
               "{\n"
               "  :mode :multi-user\n"
+              "  :authorized-group \"wheel\"\n"
               "  :sandbox-build-users [\n"
               "    " (string/join (map |(string/format "%j" (string "hermes_build_user" $)) (range 9)) "\n    ") "\n"
-              "  ]\n"
-              "  :authorized-groups [\n"
-              "    \"hermes_users\"\n"
               "  ]\n"
               "}\n"))
 

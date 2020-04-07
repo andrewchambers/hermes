@@ -20,7 +20,7 @@ typedef struct {
                     
                      A frozen package only marshals
                      values essential for running it's builder. */
-    
+
     Janet hash;   // nil or string
     Janet builder; // nil function
     Janet path;   // nil or string
@@ -88,5 +88,6 @@ Janet jgetuid(int argc, Janet *argv);
 Janet jgeteuid(int argc, Janet *argv);
 Janet jgetgid(int argc, Janet *argv);
 Janet jgetegid(int argc, Janet *argv);
-
+Janet jgetgroups(int argc, Janet *argv);
+Janet jgetgrnam(int argc, Janet *argv);
 

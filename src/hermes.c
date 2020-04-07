@@ -168,6 +168,7 @@ static const JanetReg cfuns[] = {
     {"sha256-file-hash", sha256_file_hash, NULL},
     {"pkg-dependencies", pkg_dependencies, NULL},
     {"hash-scan", hash_scan, NULL},
+    {"getgrnam", jgetgrnam, NULL},
     {"getpwnam", jgetpwnam, NULL},
     {"getpwuid", jgetpwuid, NULL},
     {"getgid", jgetgid, NULL},
@@ -177,6 +178,7 @@ static const JanetReg cfuns[] = {
     {"setuid", jseteuid, NULL},
     {"seteuid", jseteuid, NULL},
     {"setegid", jsetegid, NULL},
+    {"getgroups", jgetgroups, NULL},
     {NULL, NULL, NULL}
 };
 
