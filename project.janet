@@ -24,7 +24,7 @@
            "src/sha1.c"
            "src/sha256.c"
            "src/pathhash.c"
-           "src/pkghash.c"
+           "src/pkgfreeze.c"
            "src/deps.c"
            "src/hashscan.c"
            "src/base16.c"

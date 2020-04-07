@@ -14,9 +14,16 @@ typedef struct {
 } HashState;
 
 typedef struct {
-    Janet hash;  // nil or string
+    char frozen;  /* Once a package is frozen,
+                     It's hash has been computed and
+                     the path on disk has been computed.
+                    
+                     A frozen package only marshals
+                     values essential for running it's builder. */
+    
+    Janet hash;   // nil or string
     Janet builder; // nil function
-    Janet path; // nil or string
+    Janet path;   // nil or string
     Janet name; // nil or string
     Janet content; // nil or string or struct
     Janet extra_refs; // nil or [Pkg]
@@ -28,9 +35,9 @@ typedef struct {
 
 extern const JanetAbstractType pkg_type;
 
-/* pkghash.c */
+/* pkgfreeze.c */
 
-Janet pkg_hash(int32_t argc, Janet *argv);
+Janet pkg_freeze(int32_t argc, Janet *argv);
 
 /* pathhash.c */
 

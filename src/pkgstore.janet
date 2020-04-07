@@ -369,8 +369,8 @@
     (put registry (p :builder) '*pkg-noop-build*))
 
   (each p (dep-info :order)
-    # Hash the packages in order as children must be hashed first.
-    (_hermes/pkg-hash *store-path* builder/builder-registry p))
+    # Freeze the packages in order as children must be frozen first.
+    (_hermes/pkg-freeze *store-path* builder/builder-registry p))
 
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
   (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]

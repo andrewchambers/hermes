@@ -108,24 +108,32 @@ static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
     janet_marshal_abstract(ctx, p);
     janet_marshal_janet(ctx, pkg->builder);
     janet_marshal_janet(ctx, pkg->name);
-    janet_marshal_janet(ctx, pkg->content);
     janet_marshal_janet(ctx, pkg->hash);
     janet_marshal_janet(ctx, pkg->path);
-    janet_marshal_janet(ctx, pkg->forced_refs);
-    janet_marshal_janet(ctx, pkg->extra_refs);
-    janet_marshal_janet(ctx, pkg->weak_refs);
+    if (pkg->frozen) {
+        janet_marshal_janet(ctx, janet_wrap_nil());
+        janet_marshal_janet(ctx, janet_wrap_nil());
+        janet_marshal_janet(ctx, janet_wrap_nil());
+        janet_marshal_janet(ctx, janet_wrap_nil());
+    } else {
+        janet_marshal_janet(ctx, pkg->content);
+        janet_marshal_janet(ctx, pkg->forced_refs);
+        janet_marshal_janet(ctx, pkg->extra_refs);
+        janet_marshal_janet(ctx, pkg->weak_refs);
+    }
 }
 
 static void* pkg_unmarshal(JanetMarshalContext *ctx) {
     Pkg *pkg = janet_unmarshal_abstract(ctx, sizeof(Pkg));
     pkg->builder = janet_unmarshal_janet(ctx);
     pkg->name = janet_unmarshal_janet(ctx);
-    pkg->content = janet_unmarshal_janet(ctx);
     pkg->hash = janet_unmarshal_janet(ctx);
     pkg->path = janet_unmarshal_janet(ctx);
+    pkg->content = janet_unmarshal_janet(ctx);
     pkg->forced_refs = janet_unmarshal_janet(ctx);
     pkg->extra_refs = janet_unmarshal_janet(ctx);
     pkg->weak_refs = janet_unmarshal_janet(ctx);
+    pkg->frozen = !janet_checktype(pkg->hash, JANET_NIL);
     validate_pkg(pkg);
     return pkg;
 }
@@ -134,6 +142,7 @@ static Janet pkg(int argc, Janet *argv) {
     janet_fixarity(argc, 6);
 
     Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
+    pkg->frozen = 0;
     pkg->builder = argv[0];
     pkg->name = argv[1];
     pkg->content = argv[2];
@@ -154,7 +163,7 @@ const JanetAbstractType pkg_type = {
 
 static const JanetReg cfuns[] = {
     {"pkg", pkg, NULL},
-    {"pkg-hash", pkg_hash, NULL},
+    {"pkg-freeze", pkg_freeze, NULL},
     {"sha256-dir-hash", sha256_dir_hash, NULL},
     {"sha256-file-hash", sha256_file_hash, NULL},
     {"pkg-dependencies", pkg_dependencies, NULL},

@@ -459,9 +459,7 @@ static Janet make_pkg_path(JanetString store_path, JanetString hash, Janet name)
     return janet_stringv(tmp, ntmp);
 }
 
-// XXX Maybe this should be called 'freeze', 'finalize', or some other word.
-// Not only do we hash he package, we compute and cache it's path on disk.
-Janet pkg_hash(int32_t argc, Janet *argv) {
+Janet pkg_freeze(int32_t argc, Janet *argv) {
     janet_fixarity(argc, 3);
 
     if (!janet_checktypes(argv[0], JANET_TFLAG_STRING))
@@ -488,6 +486,6 @@ Janet pkg_hash(int32_t argc, Janet *argv) {
     JanetString hash = finalize_pkg_hash_state(&st);
     pkg->hash = janet_wrap_string(hash);
     pkg->path = make_pkg_path(store_path, hash, pkg->name);
-
+    pkg->frozen = 1;
     return pkg->hash;
 }
