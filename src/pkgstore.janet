@@ -35,7 +35,7 @@
   (def cfg-stat (os/lstat cfg-path))
   
   (unless cfg-stat
-    (error "unable to open package store"))
+    (error (string/format "unable to open package store, %j missing" cfg-path)))
  
   (set *store-config* (jdn/decode (slurp cfg-path)))
   (set *store-owner-uid* (cfg-stat :uid))

@@ -212,6 +212,60 @@
   (def pkgstore-cmd @["hermes-pkgstore" "gc" "-s" *store-path*])
   (os/exit (process/run pkgstore-cmd)))
 
+(def- cp-params
+  ["Copy a package closure between package stores."
+   "to-store"
+    {:kind :option
+     :short "t"
+     :help "The store copy into."}
+   :default {:kind :accumulate}])
+
+(defn- cp
+  []
+  (def parsed-args (argparse/argparse ;cp-params))
+  (unless parsed-args
+    (os/exit 1))
+  
+  (unless (= 2 (length (parsed-args :default)))
+    (error "expected a 'from' and 'to' argument"))
+
+  (def [from to] (parsed-args :default))
+
+  # TODO handle ssh port.
+  # TODO pass in config.
+  (def ssh-peg (peg/compile ~{
+    :main (* "ssh://" (capture (some (* (not "/") 1)))  (capture (any 1)))
+  }))
+
+  (def from-cmd
+    (if-let [[host from] (peg/match ssh-peg from)]
+      @["ssh" host "hermes-pkgstore" "send" "-p" from]
+      @["hermes-pkgstore" "send" "-p" from]))
+
+  (def to-cmd
+    (do
+      (def store-args
+        (if-let [to-store (parsed-args "to-store")]
+          @["-s" to-store] 
+          @[]))
+      (if-let [[host to] (peg/match ssh-peg to)]
+        @["ssh" host "--" "hermes-pkgstore" "recv" ;store-args "-o" to]
+        @["hermes-pkgstore" "recv" ;store-args "-o" to])))
+
+  (def [a b] (process/pipe))
+  (def [c d] (process/pipe))
+
+  (with [send-proc (process/spawn from-cmd :redirects [[stdout b] [stdin c]])]
+  (with [recv-proc (process/spawn to-cmd :redirects [[stdout d] [stdin a]])]
+    
+    (map file/close [a b c d])
+
+    (let [send-exit (process/wait send-proc)
+          recv-exit (process/wait recv-proc)]
+      (unless (and (zero? send-exit)
+                   (zero? recv-exit))
+        (error "copy failed"))))))
+
 (defn main
   [&]
   (def args (dyn :args))
@@ -221,5 +275,6 @@
       [_ "init"] (init)
       [_ "build"] (build)
       [_ "gc"] (gc)
+      [_ "cp"] (cp)
       _ (unknown-command)))
   nil)

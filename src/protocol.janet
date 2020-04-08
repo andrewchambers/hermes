@@ -4,7 +4,6 @@
 (def- sz-buf @"")
 
 (defn send-msg [f msg]
-  (eprintf "> send %j" msg)
   (def msg-buf (jdn/encode msg))
   (buffer/push-word (buffer/clear sz-buf) (length msg-buf))
   (file/write f sz-buf)
@@ -32,8 +31,7 @@
   (def buf (file/read f sz))
   (unless (= (length buf) sz)
     (short-read-error))
-  (def msg (jdn/decode buf))
-  msg)
+  (jdn/decode buf))
 
 (defn send-dir
   [f path]
