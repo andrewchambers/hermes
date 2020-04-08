@@ -3,11 +3,13 @@
 (import path)
 (import flock)
 (import jdn)
+(import ./protocol)
 (import ./builder)
 (import ../build/_hermes :as _hermes)
 
 (var- *store-path* nil)
 (var- *store-config* nil)
+(var- *store-owner-uid* nil)
 
 (defn open-pkg-store
   [store-path]
@@ -36,6 +38,7 @@
     (error "unable to open package store"))
  
   (set *store-config* (jdn/decode (slurp cfg-path)))
+  (set *store-owner-uid* (cfg-stat :uid))
 
   (case (*store-config* :mode)
     :single-user
@@ -154,6 +157,12 @@
     (string hash "-" name)
     (string hash)))
 
+(defn- pkg-parts-from-dir-name
+  [dir-name]
+  (if-let [idx (string/find "-" dir-name)]
+    [(string/slice dir-name 0 idx) (string/slice dir-name (inc idx))]
+    [dir-name nil]))
+
 (defn- build-lock-cleanup
   []
   (def all-locks (os/dir (string *store-path* "/var/hermes/lock")))
@@ -171,14 +180,58 @@
   [db hash]
   (not (empty? (sqlite3/eval db "select 1 from Pkgs where Hash=:hash" {:hash hash}))))
 
+(defn- has-pkg-with-dirname
+  [db dir-name]
+  (def hash (first (pkg-parts-from-dir-name dir-name)))
+  (has-pkg-with-hash db hash))
+
+(defn- walk-closure
+  [roots &opt f]
+
+  (def ref-work-q @[])
+  (def visited @{})
+
+  (defn- enqueue
+    [ref]
+    (unless (in visited ref)
+      (put visited ref true)
+      (array/push ref-work-q ref)))
+
+  (each root roots 
+    (def abs-path (os/realpath root))
+    (enqueue (path/basename abs-path)))
+
+  (defn -walk-closure []
+    (unless (empty? ref-work-q)
+      (def ref (array/pop ref-work-q))
+      (def pkg-path (string *store-path* "/hpkg/" ref))
+      (def pkg-info (jdn/decode (slurp (string pkg-path "/.hpkg.jdn"))))
+      (when f
+        (f pkg-path pkg-info))
+      (def new-refs
+        (if-let [forced-refs (pkg-info :force-refs)]
+          forced-refs
+          (let [unfiltered-refs (array/concat @[]
+                                  (get pkg-info :scanned-refs [])
+                                  (get pkg-info :extra-refs []))]
+            (if-let [weak-refs (pkg-info :weak-refs)]
+              (do
+                (def weak-refs-lut (reduce |(put $0 $1 true) @{} weak-refs))
+                (filter weak-refs-lut unfiltered-refs))
+              unfiltered-refs))))
+      (each ref new-refs
+        (enqueue ref))
+      (-walk-closure)))
+  (-walk-closure)
+  visited)
+
 (defn gc
   []
   (assert *store-config*)
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :exclusive)]
   (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
 
-    (def work-q @[])
-    (def visited @{})
+    (def root-pkg-paths @[])
 
     (defn process-roots
       []
@@ -187,42 +240,23 @@
       (each root roots
         (if-let [rstat (os/lstat root)
                  is-link (= :link (rstat :mode))
-                 [hash name] (path-to-pkg-parts (os/readlink root))
+                 pkg-path (os/readlink root)
+                 [hash name] (path-to-pkg-parts pkg-path)
                  have-pkg (has-pkg-with-hash db hash)]
-          (array/push work-q (string *store-path* "/hpkg/" (pkg-dir-name-from-parts hash name)))
+          (array/push root-pkg-paths pkg-path)
           (array/push dead-roots root)))
       (sqlite3/eval db "begin transaction;")
       (each root dead-roots
         (sqlite3/eval db "delete from Roots where LinkPath = :root;" {:root root}))
       (sqlite3/eval db "commit;"))
-
-    (defn gc-walk []
-      (unless (empty? work-q)
-        (def pkg-dir (array/pop work-q))
-        (if (visited pkg-dir)
-          (gc-walk)
-          (do
-            (put visited pkg-dir true)
-            (def pkg-info (jdn/decode (slurp (string pkg-dir "/.hpkg.jdn"))))
-            (def ref-to-full-path |(string *store-path* "/hpkg/" $))
-            (array/concat work-q
-              (map ref-to-full-path
-                (if (pkg-info :force-refs)
-                  (pkg-info :force-refs)
-                  (let [refs (array/concat @[]
-                               (get pkg-info :scanned-refs [])
-                               (get pkg-info :extra-refs []))]
-                    (if-let [weak-refs (pkg-info :weak-refs)]
-                      (filter |(get weak-refs $) refs)
-                      refs)))))
-            (gc-walk)))))
     
     (process-roots)
-    (gc-walk)
+    (def visited (walk-closure root-pkg-paths))
 
     (each dirname (os/dir (string *store-path* "/hpkg/"))
       (def pkg-dir (string *store-path* "/hpkg/" dirname))
-      (unless (visited pkg-dir)
+      (def dir-name (path/basename pkg-dir))
+      (unless (visited dir-name)
         (when-let [[hash name] (path-to-pkg-parts pkg-dir)]
           (sqlite3/eval db "delete from Pkgs where Hash = :hash;" {:hash hash}))
         (eprintf "deleting %s" pkg-dir)
@@ -360,6 +394,16 @@
   (def basename (path/basename self))
   (path/join (string/slice self 0 (- -1 (length basename))) "hermes-builder"))
 
+(defn add-root
+  [db pkg-path root]
+  (with [old-euid (_hermes/geteuid) _hermes/seteuid]
+    (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
+    (def tmplink (string root ".hermes-root"))
+    (when (os/stat tmplink)
+      (os/rm tmplink))
+    (os/link pkg-path tmplink true)
+    (os/rename tmplink root)))
+
 (defn build
   [pkg &opt gc-root]
   (assert *store-config*)
@@ -381,22 +425,18 @@
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
   (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
     
-    (defn has-pkg
-      [pkg]
-      (has-pkg-with-hash db (pkg :hash)))
-
     (defn build2
       [pkg]
-      (unless (has-pkg pkg)
+      (unless (has-pkg-with-hash db (pkg :hash))
         (each dep (get-in dep-info [:deps pkg])
-          (unless (has-pkg dep)
+          (unless (has-pkg-with-hash db (dep :hash))
             (build2 dep)))
 
         (with [build-user (aquire-build-user)]
         (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/build-" (pkg :hash) ".lock") :block :exclusive)]
           # After aquiring the package lock, check again that it doesn't exist.
           # This is in case multiple builders were waiting.
-          (when (not (has-pkg pkg))
+          (when (not (has-pkg-with-hash db (pkg :hash)))
             
             (when (os/stat (pkg :path))
               (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
@@ -516,14 +556,83 @@
     (build2 pkg)
 
     (when gc-root
-      (with [old-euid (_hermes/geteuid) _hermes/seteuid]
-        (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root gc-root})
-        (def tmplink (string gc-root ".hermes-root"))
-        (when (os/stat tmplink)
-          (os/rm tmplink))
-        (os/link (pkg :path) tmplink true)
-        (os/rename tmplink gc-root)))))
+      (add-root db (pkg :path) gc-root))))
     
     (optimistic-build-lock-cleanup)
     
     nil)
+
+(defn send-pkg-closure
+  [out in pkg-root]
+
+  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+    
+    (def pkg-path (os/realpath pkg-root))
+    
+    (unless (if-let [[hash name] (path-to-pkg-parts pkg-path)]
+              (has-pkg-with-hash db hash))
+      (error (string/format "unable to send %v, not a package" pkg-path)))
+
+    (var refs @[])
+    (walk-closure [pkg-root] (fn [path info]
+                               (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
+    (set refs (reverse refs))
+
+    (protocol/send-msg out [:send-closure refs])
+    (match (protocol/recv-msg in)
+      [:ack-closure want]
+        (let [want-lut (reduce |(put $0 $1 true) @{} want)]
+          (set refs (filter want-lut refs)))
+      (error "protocol error, expected [:ack-closure refs]"))
+    
+    (each ref refs
+      (protocol/send-msg out [:sending-pkg ref])
+      (protocol/send-dir out (string *store-path* "/hpkg/" ref)))
+
+    (protocol/send-msg out :end-of-send)
+
+    (unless (= :ok (protocol/recv-msg in))
+      (error "remote did not acknowledge send")))))
+
+(defn recv-pkg-closure
+  [out in gc-root]
+
+  (unless (= (_hermes/getuid) *store-owner-uid*)
+    (error "only the store owner has permission to receive packages"))
+
+  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+    (def root-ref
+      (match (protocol/recv-msg in)
+        [:send-closure incoming]
+          (let [want (filter |(not (has-pkg-with-dirname db $)) incoming)]
+            (protocol/send-msg out [:ack-closure want])
+            (last incoming))
+        (error "protocol error, expected :send-closure")))
+    
+    (defn recv-pkgs
+      []
+      (match (protocol/recv-msg in)
+        [:sending-pkg ref]
+          (do
+            (def [pkg-hash pkg-name] (pkg-parts-from-dir-name ref))
+            (def build-lock-path (string *store-path* "/var/hermes/lock/build-" pkg-hash ".lock"))
+            (with [build-lock (flock/acquire build-lock-path :block :exclusive)]
+              (def pkg-path (string *store-path* "/hpkg/" ref))
+              (when (os/stat pkg-path)
+                (sh/$ ["chmod" "-R" "u+w" pkg-path])
+                (sh/$ ["rm" "-rf" pkg-path]))
+              (protocol/recv-dir in pkg-path)
+              (os/chmod pkg-path 8r555)
+              (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
+                {:hash pkg-hash :name pkg-name}))
+            (recv-pkgs))
+        :end-of-send
+          (protocol/send-msg out :ok)
+        (error "protocol error, expected :end-of-send or :sending-pkg")))
+    
+    (recv-pkgs)
+
+    (when gc-root
+      (add-root db (string *store-path* "/hpkg/" root-ref) gc-root)))))

@@ -1,4 +1,5 @@
 (import argparse)
+(import path)
 (import ./pkgstore)
 (import ./builder)
 (import ../build/_hermes)
@@ -17,7 +18,7 @@
 (defn- unknown-command
   []
   (die
-    (string/format "unknown command: %v" (get (dyn :args) 0 "<no command specified>"))))
+    (string/format "unknown command: %v" ((dyn :args) 0))))
 
 (def- init-params
   ["Init the hermes package store."
@@ -29,9 +30,6 @@
 
 (defn- init
   []
-  # N.B.
-  # Because we support installing the pkgstore as setuid root.
-  # We must always perform init as the real user.
   (drop-setuid+setgid-privs)
 
   (def parsed-args (argparse/argparse ;init-params))
@@ -75,8 +73,6 @@
   
   (def store (parsed-args "store"))
   
-  # N.B. If it is a single user store, we must drop privileges
-  # to avoid excess privileges when pkgstore is setuid root.
   (unless (= store "")
     (drop-setuid+setgid-privs))
 
@@ -110,14 +106,69 @@
 
   (def store (parsed-args "store"))
 
-  # N.B. If it is a single user store, we must drop privileges
-  # to avoid excess privileges when pkgstore is setuid root.
   (unless (= store "")
     (drop-setuid+setgid-privs))
 
-  (pkgstore/open-pkg-store (parsed-args "store"))
+  (pkgstore/open-pkg-store store)
 
   (pkgstore/gc))
+
+(def- send-params
+  ["Send a package closure over stdin/stdout with the send/recv protocol."
+   "package" 
+     {:kind :option
+      :short "p"
+      :help "Path to package that is being sent."}])
+
+(defn- send
+  []
+  (def parsed-args (argparse/argparse ;send-params))
+
+  (unless parsed-args
+    (os/exit 1))
+
+  (def package (os/realpath (parsed-args "package")))
+  (def hpkg-dir (let [pkg-name (path/basename package)]
+                  (string/slice package 0 (- -2 (length pkg-name)))))
+  
+  (unless (string/has-suffix? "/hpkg" hpkg-dir)
+    (error (string/format "%v is not a hermes package path" package)))
+
+  (def store (string/slice hpkg-dir 0 -6))
+
+  (unless (= store "")
+    (drop-setuid+setgid-privs))
+
+  (pkgstore/open-pkg-store store)
+  (pkgstore/send-pkg-closure stdout stdin package))
+
+
+(def- recv-params
+  ["Receive a package closure sent over stdin/stdout with the send/recv protocol."
+   "store" 
+     {:kind :option
+      :short "s"
+      :default ""
+      :help "Package store to receive the closure."}
+    "output" 
+     {:kind :option
+      :short "o"
+      :help "Path to where package output link will be created."}])
+
+(defn- recv
+  []
+  (def parsed-args (argparse/argparse ;recv-params))
+
+  (unless parsed-args
+    (os/exit 1))
+
+  (def store (parsed-args "store"))
+
+  (unless (= store "")
+    (drop-setuid+setgid-privs))
+
+  (pkgstore/open-pkg-store store)
+  (pkgstore/recv-pkg-closure stdout stdin (parsed-args "output")))
 
 (defn main
   [&]
@@ -127,5 +178,7 @@
       [_ "init"] (init)
       [_ "build"] (build)
       [_ "gc"] (gc)
+      [_ "send"] (send)
+      [_ "recv"] (recv)
       _ (unknown-command)))
   nil)

@@ -1,18 +1,26 @@
 (import process)
 (import jdn)
 
-(def- sz-buf (buffer/new))
+(def- sz-buf @"")
 
 (defn send-msg [f msg]
+  (eprintf "> send %j" msg)
   (def msg-buf (jdn/encode msg))
   (buffer/push-word (buffer/clear sz-buf) (length msg-buf))
   (file/write f sz-buf)
   (file/write f msg-buf)
   (file/flush f))
 
+(defn short-read-error
+  []
+  (error "remote unexpectedly terminated the connection"))
+
 (defn- read-sz
   [f]
   (file/read f 4 (buffer/clear sz-buf))
+  (unless (= (length sz-buf) 4)
+    (short-read-error))
+
   (bor 
              (in sz-buf 0)
     (blshift (in sz-buf 1) 8)
@@ -21,9 +29,13 @@
 
 (defn recv-msg [f]
   (def sz (read-sz f))
-  (jdn/decode (file/read f sz)))
+  (def buf (file/read f sz))
+  (unless (= (length buf) sz)
+    (short-read-error))
+  (def msg (jdn/decode buf))
+  msg)
 
-(defn send-tar
+(defn send-dir
   [f path]
   (def [p1 p2] (process/pipe))
   (defer (do
@@ -35,7 +47,7 @@
                    "--numeric-owner"
                    "--owner=0"
                    "--group=0"
-                   "-c" "-z" "-f" "-" "."]
+                   "-c" "-f" "-" "."]
                   :redirects [[stdout p2]])]
       (file/close p2)
       (def buf @"")
@@ -49,11 +61,11 @@
           nil
           (send-chunks)))
       (send-chunks)
-      (unless (zero? (process/wait tar))
-        (error "sending directory failed"))
-      (send-msg f :ok))))
 
-(defn recv-tar
+      (unless (zero? (process/wait tar))
+        (error "sending directory failed")))))
+
+(defn recv-dir
   [f path]
   (os/mkdir path)
   (def [p1 p2] (process/pipe))
@@ -63,7 +75,7 @@
     (with [tar (process/spawn
                   ["tar"
                    "-C" path
-                   "-x" "-z" "-f" "-"]
+                   "-p" "-x" "-f" "-"]
                   :redirects [[stdin p1]])]
       (file/close p1)
       (def buf @"")
@@ -71,15 +83,13 @@
         []
         (def sz (read-sz f))
         (if (zero? sz)
-          (do
-            (file/close p2)
-            nil)
+          (file/close p2)
           (do 
             (file/read f sz (buffer/clear buf))
-            (file/write p2 buf))
-            (recv-chunks)))
+            (unless (= (length buf) sz)
+              (short-read-error))
+            (file/write p2 buf)
+            (recv-chunks))))
       (recv-chunks)
       (unless (zero? (process/wait tar))
-        (error "receiving directory failed"))
-      (unless (= (recv-msg f) :ok)
-        (error "remote protocol error, expected send :ok")))))
+        (error "receiving directory failed")))))
