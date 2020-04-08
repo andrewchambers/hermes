@@ -252,13 +252,13 @@
         @["ssh" host "--" "hermes-pkgstore" "recv" ;store-args "-o" to]
         @["hermes-pkgstore" "recv" ;store-args "-o" to])))
 
-  (def [a b] (process/pipe))
-  (def [c d] (process/pipe))
+  (def [pipe1< pipe1>] (process/pipe))
+  (def [pipe2< pipe2>] (process/pipe))
 
-  (with [send-proc (process/spawn from-cmd :redirects [[stdout b] [stdin c]])]
-  (with [recv-proc (process/spawn to-cmd :redirects [[stdout d] [stdin a]])]
+  (with [send-proc (process/spawn from-cmd :redirects [[stdout pipe1>] [stdin pipe2<]])]
+  (with [recv-proc (process/spawn to-cmd :redirects [[stdout pipe2>] [stdin pipe1<]])]
     
-    (map file/close [a b c d])
+    (map file/close [pipe1< pipe1> pipe2< pipe2>])
 
     (let [send-exit (process/wait send-proc)
           recv-exit (process/wait recv-proc)]
