@@ -373,6 +373,7 @@
     (if (= idx (length users))
       (do
         # XXX exp backoff?
+        (eprintf "waiting for more free build user...")
         (os/sleep 0.5)
         (select-and-lock-build-user users 0))
       (let [u (users idx)]
@@ -422,141 +423,161 @@
     # Freeze the packages in order as children must be frozen first.
     (_hermes/pkg-freeze *store-path* builder/builder-registry p))
 
-  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [gc-flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [build-user (aquire-build-user)]
   (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
-    
-    (defn build2
+
+    (var run-builder nil)
+
+    (defn build-pkg
       [pkg]
-      (unless (has-pkg-with-hash db (pkg :hash))
-        (each dep (get-in dep-info [:deps pkg])
-          (unless (has-pkg-with-hash db (dep :hash))
-            (build2 dep)))
+      (if (has-pkg-with-hash db (pkg :hash))
+        true
+        (do
+          (var deps-ready true)
+          (each dep (get-in dep-info [:deps pkg])
+            (set deps-ready (and (build-pkg dep) deps-ready)))
+          
+          (if deps-ready
+            (do
+              (def flock (flock/acquire (string *store-path* "/var/hermes/lock/build-" (pkg :hash) ".lock") :noblock :exclusive))
+              (if flock
+                (defer (:close flock)
+                  (when (not (has-pkg-with-hash db (pkg :hash)))
+                    # After aquiring the package lock, check again that it doesn't exist.
+                    # This is in case multiple builders were waiting, and another did the build.
+                    (run-builder pkg))
+                  true)
+              false))))))
+    
+    (set run-builder 
+      (fn run-builder
+        [pkg]
+        (eprintf "building %s..." (pkg :path))
+        (when (os/stat (pkg :path))
+          (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
+          (sh/$ ["rm" "-rf" (pkg :path)]))
+        
+        (sh/$ ["mkdir" (pkg :path)])
 
-        (with [build-user (aquire-build-user)]
-        (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/build-" (pkg :hash) ".lock") :block :exclusive)]
-          # After aquiring the package lock, check again that it doesn't exist.
-          # This is in case multiple builders were waiting.
-          (when (not (has-pkg-with-hash db (pkg :hash)))
-            
-            (when (os/stat (pkg :path))
-              (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
-              (sh/$ ["rm" "-rf" (pkg :path)]))
-            
-            (sh/$ ["mkdir" (pkg :path)])
+        (when (= store-mode :single-user)
+          # XXX FIXME. We set the permissions to 777
+          # during a single user build to ensure the 
+          # sandbox user can actually write to it. 
+          # When initializing the store we mark it's
+          # root directory as 700 so this should
+          # be secure, however it also seems like 
+          # a kludge that could be fixed.
+          (os/chmod (pkg :path) 8r777))
 
-            (when (= store-mode :single-user)
-              # XXX FIXME. We set the permissions to 777
-              # during a single user build to ensure the 
-              # sandbox user can actually write to it. 
-              # When initializing the store we mark it's
-              # root directory as 700 so this should
-              # be secure, however it also seems like 
-              # a kludge that could be fixed.
-              (os/chmod (pkg :path) 8r777))
+        (def tmpdir (sh/$$_ ["mktemp" "-d"]))
+        (defer (do
+                 (sh/$ ["chmod" "-R" "u+w" tmpdir])
+                 (sh/$ ["rm" "-r" tmpdir]))
+          
+          (def bin (string tmpdir "/bin"))
+          (def usr-bin (string tmpdir "/usr/bin"))
+          (def tmp (string tmpdir "/tmp"))
+          (def build (string tmpdir "/tmp/build"))
 
-            (def tmpdir (sh/$$_ ["mktemp" "-d"]))
-            (defer (do
-                     (sh/$ ["chmod" "-R" "u+w" tmpdir])
-                     (sh/$ ["rm" "-r" tmpdir]))
-              
-              (def bin (string tmpdir "/bin"))
-              (def usr-bin (string tmpdir "/usr/bin"))
-              (def tmp (string tmpdir "/tmp"))
-              (def build (string tmpdir "/tmp/build"))
+          (sh/$ ["mkdir" "-p" build bin usr-bin])
 
-              (sh/$ ["mkdir" "-p" build bin usr-bin])
+          (when (= store-mode :multi-user)
+            # Paths that need to be owned by the build user.
+            (sh/$ [
+              "chown"
+              (string (build-user :uid) ":" (build-user :gid))
+              bin build usr-bin tmp (pkg :path)]))
 
-              (when (= store-mode :multi-user)
-                # Paths that need to be owned by the build user.
-                (sh/$ [
-                  "chown"
-                  (string (build-user :uid) ":" (build-user :gid))
-                  bin build usr-bin tmp (pkg :path)]))
+          (def do-build 
+            # This awkward wrapper is related to the janet
+            # internals, we want a detached env with as few
+            # slots referenced as possible.
+            (do
+              (defn make-builder [pkg]
+                (fn do-build []
+                  (os/cd "/tmp/build")
+                  (with-dyns [:pkg-out (pkg :path)]
+                    ((pkg :builder)))))
+              (make-builder pkg)))
 
-              (def do-build 
-                # This awkward wrapper is related to the janet
-                # internals, we want a detached env with as few
-                # slots referenced as possible.
-                (do
-                  (defn make-builder [pkg]
-                    (fn do-build []
-                      (os/cd "/tmp/build")
-                      (with-dyns [:pkg-out (pkg :path)]
-                        ((pkg :builder)))))
-                  (make-builder pkg)))
+          (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
+          (put registry (pkg :builder) nil)
+          (spit thunk-path (marshal do-build registry))
+          (put registry (pkg :builder) '*pkg-noop-build*)
 
-              (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
-              (put registry (pkg :builder) nil)
-              (spit thunk-path (marshal do-build registry))
-              (put registry (pkg :builder) '*pkg-noop-build*)
+          (sh/$ [
+            "nsjail"
+            "-M" "o"
+            "-q"
+            "--chroot" "/" # XXX We should make a proper chroot?.
+            "--rlimit_as" "max"
+            "--rlimit_cpu" "max"
+            "--rlimit_fsize" "max"
+            "--rlimit_nofile" "max"
+            "--rlimit_nproc" "max"
+            "--rlimit_stack" "max"
+            # In multi user mode we don't use user namespaces.
+            # Instead we isolate via locked build users.
+            ;(if (= store-mode :multi-user) ["--disable_clone_newuser"] [])
+            ;(if (pkg :content) ["--disable_clone_newnet"] [])
+            "--bindmount" (string bin ":/bin")
+            "--bindmount" (string tmp ":/tmp")
+            "--bindmount" (let [hpkg-path (string *store-path* "/hpkg")]
+                            (string hpkg-path ":" hpkg-path))
+            "--user" (string (build-user :uid))
+            "--group" (string (build-user :gid))
+            "--" (find-builder-bin) "-t" "/tmp/.pkg.thunk"]))
 
-              (sh/$ [
-                "nsjail"
-                "-M" "o"
-                "-q"
-                "--chroot" "/" # XXX We should make a proper chroot?.
-                "--rlimit_as" "max"
-                "--rlimit_cpu" "max"
-                "--rlimit_fsize" "max"
-                "--rlimit_nofile" "max"
-                "--rlimit_nproc" "max"
-                "--rlimit_stack" "max"
-                # In multi user mode we don't use user namespaces.
-                # Instead we isolate via locked build users.
-                ;(if (= store-mode :multi-user) ["--disable_clone_newuser"] [])
-                ;(if (pkg :content) ["--disable_clone_newnet"] [])
-                "--bindmount" (string bin ":/bin")
-                "--bindmount" (string tmp ":/tmp")
-                "--bindmount" (let [hpkg-path (string *store-path* "/hpkg")]
-                                (string hpkg-path ":" hpkg-path))
-                "--user" (string (build-user :uid))
-                "--group" (string (build-user :gid))
-                "--" (find-builder-bin) "-t" "/tmp/.pkg.thunk"]))
+        (def scanned-refs (ref-scan db pkg))
 
-            (def scanned-refs (ref-scan db pkg))
+        # Restore package owner.
+        (when (= store-mode :multi-user)
+          # Assuming our sandbox is strong, no processes from the locked build user are currently
+          # running, so they cannot be manipulating the build dir at this point in time.
+          (sh/$ ["chown" "-R" "0:0" (pkg :path)]))
 
-            # Restore package owner.
-            (when (= store-mode :multi-user)
-              # Assuming our sandbox is strong, no processes from the locked build user are currently
-              # running, so they cannot be manipulating the build dir at this point in time.
-              (sh/$ ["chown" "-R" "0:0" (pkg :path)]))
+        # Set package permissions.
+        (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
 
-            # Set package permissions.
-            (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
+        (when-let [content (pkg :content)]
+          (match (check-pkg-content (pkg :path) content)
+            [:fail msg]
+              (error msg)))
 
-            (when-let [content (pkg :content)]
-              (match (check-pkg-content (pkg :path) content)
-                [:fail msg]
-                  (error msg)))
+        (defn refset-to-dirnames
+          [pkg set-key]
+          (when-let [rs (pkg set-key)]
+            (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
 
-            (defn refset-to-dirnames
-              [pkg set-key]
-              (when-let [rs (pkg set-key)]
-                (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
+        (os/chmod (pkg :path) 8r755)
 
-            (os/chmod (pkg :path) 8r755)
+        (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
+          :name (pkg :name)
+          :hash (pkg :hash)
+          :force-refs (refset-to-dirnames pkg :force-refs)
+          :weak-refs  (refset-to-dirnames pkg :weak-refs)
+          :extra-refs (refset-to-dirnames pkg :extra-refs)
+          :scanned-refs scanned-refs
+          :content (pkg :content)
+        }))
 
-            (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
-              :name (pkg :name)
-              :hash (pkg :hash)
-              :force-refs (refset-to-dirnames pkg :force-refs)
-              :weak-refs  (refset-to-dirnames pkg :weak-refs)
-              :extra-refs (refset-to-dirnames pkg :extra-refs)
-              :scanned-refs scanned-refs
-              :content (pkg :content)
-            }))
+        (os/chmod (pkg :path) 8r555)
 
-            (os/chmod (pkg :path) 8r555)
+        (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
+          {:hash (pkg :hash) :name (pkg :name)})
 
-            (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
-              {:hash (pkg :hash) :name (pkg :name)}))))
+      nil))
 
-          nil))
-
-    (build2 pkg)
+    (while true
+      (when (build-pkg pkg)
+        (break))
+      # TODO exp backoffs.
+      (eprintf "waiting for more work...")
+      (os/sleep 0.2))
 
     (when gc-root
-      (add-root db (pkg :path) gc-root))))
+      (add-root db (pkg :path) gc-root)))))
     
     (optimistic-build-lock-cleanup)
     

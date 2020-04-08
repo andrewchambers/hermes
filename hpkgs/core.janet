@@ -296,7 +296,7 @@
       "TARGET=x86_64-linux-musl\n"
       "OUTPUT=" (dyn :pkg-out) "\n"
       "COMMON_CONFIG += CC=\"cc -static --static\" CXX=\"c++ -static --static\"\n"
-      "COMMON_CONFIG += CFLAGS=\"-g0 -Os\" CXXFLAGS=\"-g0 -Os\" LDFLAGS=\"-s\"\n"
+      "COMMON_CONFIG += CFLAGS=\"-O3\" CXXFLAGS=\"-O3\" LDFLAGS=\"-s\"\n"
       "DL_CMD=false\n"
       "COWPATCH=" (os/cwd) "/cowpatch.sh\n"))
 
