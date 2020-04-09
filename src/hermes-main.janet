@@ -249,7 +249,7 @@
           @["-s" to-store] 
           @[]))
       (if-let [[host to] (peg/match ssh-peg to)]
-        @["ssh" host "--" "hermes-pkgstore" "recv" ;store-args "-o" to]
+        @["ssh" host "--" "hermes-pkgstore" "recv" ;store-args ;(if to ["-o"  to] [])]
         @["hermes-pkgstore" "recv" ;store-args "-o" to])))
 
   (def [pipe1< pipe1>] (process/pipe))
