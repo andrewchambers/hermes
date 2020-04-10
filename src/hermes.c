@@ -1,5 +1,9 @@
 #include <janet.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <errno.h>
 #include "hermes.h"
+
 
 static int pkg_gcmark(void *p, size_t s) {
     (void)s;
@@ -179,10 +183,26 @@ static const JanetReg cfuns[] = {
     {"seteuid", jseteuid, NULL},
     {"setegid", jsetegid, NULL},
     {"getgroups", jgetgroups, NULL},
+    {"unix-listen", unix_listen, NULL},
+    {"fork", jfork, NULL},
+    {"waitpid", jwaitpid, NULL},
     {NULL, NULL, NULL}
 };
 
 JANET_MODULE_ENTRY(JanetTable *env) {
     janet_register_abstract_type(&pkg_type);
     janet_cfuns(env, "_hermes", cfuns);
+
+
+#define DEF_CONSTANT_INT(X) janet_def(env, #X, janet_wrap_integer(X), NULL)
+
+    // waitpid.
+    DEF_CONSTANT_INT(WUNTRACED);
+    DEF_CONSTANT_INT(WNOHANG);
+    DEF_CONSTANT_INT(ECHILD);
+    DEF_CONSTANT_INT(ESRCH);
+    DEF_CONSTANT_INT(EACCES);
+    DEF_CONSTANT_INT(EPERM);
+
+#undef DEF_CONSTANT_INT
 }

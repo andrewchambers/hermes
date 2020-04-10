@@ -141,7 +141,7 @@
   :url
     "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
   :hash
-    "sha256:e1b3c10021d1e662e1125ead2fdb29fd21d5c7da9579b9d59a254bafd3281a44")
+    "sha256:ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269")
 
 (def bzip2
   (pkg
@@ -154,7 +154,12 @@
                             (os/dir)
                             (filter |(not (string/has-prefix? "." $)))
                             (first)))
+                            
       (unpack (string (bzip2-src :path) "/"  src-archive) :strip 1)
+      (->> (slurp "Makefile")
+           (string/replace "SHELL=/bin/sh" "SHELL=sh")
+           (spit "Makefile"))
+
       (sh/$ ["make" "install"
                "CC=x86_64-linux-musl-cc --static"
                "CFLAGS=-O2"
@@ -215,6 +220,7 @@
         grep
         which
         tar
+        bzip2
         gzip
         lzip
         xz

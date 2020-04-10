@@ -40,7 +40,7 @@
            (file/close p1)
            (file/close p2))
     (with [tar (process/spawn
-                  ["tar"
+                  ["tar" # Note compression is done via the transport, e.g. ssh -C
                    "-C" path
                    "--numeric-owner"
                    "--owner=0"

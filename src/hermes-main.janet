@@ -231,7 +231,6 @@
 
   (def [from to] (parsed-args :default))
 
-  # TODO handle ssh port.
   # TODO pass in config.
   (def ssh-peg (peg/compile ~{
     :main (* "ssh://" (capture (some (* (not "/") 1)))  (capture (any 1)))
@@ -239,7 +238,7 @@
 
   (def from-cmd
     (if-let [[host from] (peg/match ssh-peg from)]
-      @["ssh" host "hermes-pkgstore" "send" "-p" from]
+      @["ssh" "-C" host "hermes-pkgstore" "send" "-p" from]
       @["hermes-pkgstore" "send" "-p" from]))
 
   (def to-cmd
@@ -249,7 +248,7 @@
           @["-s" to-store] 
           @[]))
       (if-let [[host to] (peg/match ssh-peg to)]
-        @["ssh" host "--" "hermes-pkgstore" "recv" ;store-args ;(if to ["-o"  to] [])]
+        @["ssh" "-C" host "--" "hermes-pkgstore" "recv" ;store-args ;(if to ["-o"  to] [])]
         @["hermes-pkgstore" "recv" ;store-args "-o" to])))
 
   (def [pipe1< pipe1>] (process/pipe))

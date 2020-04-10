@@ -90,4 +90,6 @@ Janet jgetgid(int argc, Janet *argv);
 Janet jgetegid(int argc, Janet *argv);
 Janet jgetgroups(int argc, Janet *argv);
 Janet jgetgrnam(int argc, Janet *argv);
-
+Janet jfork(int argc, Janet *argv);
+Janet jwaitpid(int argc, Janet *argv);
+Janet unix_listen(int argc, Janet *argv);

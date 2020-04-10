@@ -163,6 +163,18 @@
     [(string/slice dir-name 0 idx) (string/slice dir-name (inc idx))]
     [dir-name nil]))
 
+(defn open-db
+  []
+  (sqlite3/open (string *store-path* "/var/hermes/hermes.db")))
+
+(defn- acquire-gc-lock
+  [block mode]
+  (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") block mode))
+
+(defn- acquire-build-lock
+  [hash block mode]
+  (flock/acquire (string *store-path* "/var/hermes/lock/build-" hash ".lock") block mode))
+
 (defn- build-lock-cleanup
   []
   (def all-locks (os/dir (string *store-path* "/var/hermes/lock")))
@@ -172,7 +184,7 @@
 
 (defn- optimistic-build-lock-cleanup
   []
-  (when-let [gc-lock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :noblock :exclusive)]
+  (when-let [gc-lock (acquire-gc-lock :noblock :exclusive)]
     (build-lock-cleanup)
     (:close gc-lock)))
 
@@ -228,8 +240,8 @@
 (defn gc
   []
   (assert *store-config*)
-  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :exclusive)]
-  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+  (with [gc-lock (acquire-gc-lock :block :exclusive)]
+  (with [db (open-db)]
 
     (def root-pkg-paths @[])
 
@@ -365,8 +377,8 @@
       (array/push refs (pkg-dir-name-from-parts h (row :Name)))))
   refs)
 
-(var- aquire-build-user-counter 0)
-(defn- aquire-build-user
+(var- acquire-build-user-counter 0)
+(defn- acquire-build-user
   []
   (defn select-and-lock-build-user
     [users idx]
@@ -384,7 +396,7 @@
   
   (if (= (*store-config* :mode) :multi-user)
     (let [users (get *store-config* :sandbox-build-users [])
-          start-idx (mod (++ aquire-build-user-counter) (length users))]
+          start-idx (mod (++ acquire-build-user-counter) (length users))]
       (select-and-lock-build-user users start-idx))
     (merge-into (_hermes/getpwuid (_hermes/getuid))
                 @{:close (fn [self] nil)})))
@@ -423,9 +435,9 @@
     # Freeze the packages in order as children must be frozen first.
     (_hermes/pkg-freeze *store-path* builder/builder-registry p))
 
-  (with [gc-flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
-  (with [build-user (aquire-build-user)]
-  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+  (with [gc-flock (acquire-gc-lock :block :shared)]
+  (with [build-user (acquire-build-user)]
+  (with [db (open-db)]
 
     (var run-builder nil)
 
@@ -438,17 +450,15 @@
           (each dep (get-in dep-info [:deps pkg])
             (set deps-ready (and (build-pkg dep) deps-ready)))
           
-          (if deps-ready
-            (do
-              (def flock (flock/acquire (string *store-path* "/var/hermes/lock/build-" (pkg :hash) ".lock") :noblock :exclusive))
-              (if flock
-                (defer (:close flock)
-                  (when (not (has-pkg-with-hash db (pkg :hash)))
-                    # After aquiring the package lock, check again that it doesn't exist.
-                    # This is in case multiple builders were waiting, and another did the build.
-                    (run-builder pkg))
-                  true)
-              false))))))
+            (if-let [_ deps-ready
+                     flock (acquire-build-lock (pkg :hash) :noblock :exclusive)]
+              (defer (:close flock)
+                # After aquiring the package lock, check again that it doesn't exist.
+                # This is in case multiple builders were waiting, and another did the build.
+                (when (not (has-pkg-with-hash db (pkg :hash)))
+                  (run-builder pkg))
+                true)
+              false))))
     
     (set run-builder 
       (fn run-builder
@@ -545,7 +555,7 @@
             [:fail msg]
               (error msg)))
 
-        (defn refset-to-dirnames
+        (defn pkg-refset-to-dirnames
           [pkg set-key]
           (when-let [rs (pkg set-key)]
             (map |(pkg-dir-name-from-parts ($ :hash) ($ :name)) (pkg set-key))))
@@ -555,9 +565,9 @@
         (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
           :name (pkg :name)
           :hash (pkg :hash)
-          :force-refs (refset-to-dirnames pkg :force-refs)
-          :weak-refs  (refset-to-dirnames pkg :weak-refs)
-          :extra-refs (refset-to-dirnames pkg :extra-refs)
+          :force-refs (pkg-refset-to-dirnames pkg :force-refs)
+          :weak-refs  (pkg-refset-to-dirnames pkg :weak-refs)
+          :extra-refs (pkg-refset-to-dirnames pkg :extra-refs)
           :scanned-refs scanned-refs
           :content (pkg :content)
         }))
@@ -574,7 +584,7 @@
         (break))
       # TODO exp backoffs.
       (eprintf "waiting for more work...")
-      (os/sleep 0.2))
+      (os/sleep 0.5))
 
     (when gc-root
       (add-root db (pkg :path) gc-root)))))
@@ -587,7 +597,7 @@
   [out in pkg-root]
 
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
-  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+  (with [db (open-db)]
     
     (def pkg-path (os/realpath pkg-root))
     
@@ -623,7 +633,7 @@
     (error "only the store owner has permission to receive packages"))
 
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
-  (with [db (sqlite3/open (string *store-path* "/var/hermes/hermes.db"))]
+  (with [db (open-db)]
     (def root-ref
       (match (protocol/recv-msg in)
         [:send-closure incoming]
@@ -638,8 +648,7 @@
         [:sending-pkg ref]
           (do
             (def [pkg-hash pkg-name] (pkg-parts-from-dir-name ref))
-            (def build-lock-path (string *store-path* "/var/hermes/lock/build-" pkg-hash ".lock"))
-            (with [build-lock (flock/acquire build-lock-path :block :exclusive)]
+            (with [build-lock (acquire-build-lock pkg-hash :block :exclusive)]
               (def pkg-path (string *store-path* "/hpkg/" ref))
               (when (os/stat pkg-path)
                 (sh/$ ["chmod" "-R" "u+w" pkg-path])
