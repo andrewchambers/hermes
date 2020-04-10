@@ -253,7 +253,7 @@ Janet unix_listen(int argc, Janet *argv) {
     strncpy(name.sun_path, socket_path, sizeof(name.sun_path));
     name.sun_path[sizeof (name.sun_path) - 1] = '\0';
 
-    size = (offsetof (struct sockaddr_un, sun_path)
+    size = (offsetof(struct sockaddr_un, sun_path)
             + strlen (name.sun_path));
 
     if (bind(*ps, (struct sockaddr *) &name, size) < 0)
