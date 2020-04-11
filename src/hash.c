@@ -54,11 +54,8 @@ static void hasher_add_int64(Hasher *h, int64_t x) {
     hasher_add(h, buf, sizeof(buf));
 }
 
-static void hasher_add_file_contents_at_path(Hasher *h, const char *path) {
+static int hasher_add_file(Hasher *h, FILE *f) {
     char buf[4096];
-    FILE *f = fopen(path, "rb");
-    if (!f)
-        janet_panicf("unable to open %s: %s", path, strerror(errno));
     while (1) {
         int n = fread(buf, 1, sizeof(buf), f);
         if (n > 0) {
@@ -67,9 +64,17 @@ static void hasher_add_file_contents_at_path(Hasher *h, const char *path) {
         if (n == 0)
             break;
     }
-    int ferr = ferror(f);
+    return !ferror(f);
+}
+
+static void hasher_add_file_contents_at_path(Hasher *h, const char *path) {
+   
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        janet_panicf("unable to open %s: %s", path, strerror(errno));
+    int ok = hasher_add_file(h, f);
     fclose(f);
-    if (ferr)
+    if (!ok)
         janet_panicf("io error while hashing %s", path);
 }
 
@@ -165,13 +170,20 @@ Janet sha256_dir_hash(int argc, Janet *argv) {
 
 Janet sha256_file_hash(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
-    const char *p = (const char*)janet_getstring(argv, 0);
     Sha256ctx ctx;
     sha256_init(&ctx);
     Hasher h;
     h.kind = kind_sha256;
     h.ctx.sha256 = &ctx;
-    hasher_add_file_contents_at_path(&h, p);
+    if (janet_checkabstract(argv[0], &janet_file_type)) {
+        FILE *f = janet_unwrapfile(argv[0], NULL);
+        if (!hasher_add_file(&h, f))
+          janet_panicf("error hashing file");
+    } else if (janet_checktype(argv[0], JANET_STRING)) {
+        hasher_add_file_contents_at_path(&h, (const char *)janet_unwrap_string(argv[0]));
+    } else {
+        janet_panicf("file hash expects a file object or path, got %v", argv[0]);
+    }
     uint8_t buf[32];
     uint8_t hexbuf[sizeof(buf)*2];
     sha256_finish(&ctx, buf);

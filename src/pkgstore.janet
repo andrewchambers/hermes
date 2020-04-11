@@ -3,6 +3,7 @@
 (import path)
 (import flock)
 (import jdn)
+(import ./hash)
 (import ./protocol)
 (import ./builder)
 (import ../build/_hermes :as _hermes)
@@ -279,73 +280,53 @@
 
     nil)))
 
-(defn- check-pkg-content
+(defn- assert-pkg-content
   [base-path content]
-
-  (defn- bad-content
-    [msg]
-    (return :check-content [:fail msg]))
-
-  (defn- check-hash
-    [path expected is-dir]
-    (def actual
-      (match (string/split ":" expected)
-        ["sha256" _]
-          (string
-            "sha256:"
-            (if is-dir
-              (_hermes/sha256-dir-hash path)
-              (_hermes/sha256-file-hash path)))
-        _ 
-          (bad-content (string "unsupported hash format - " expected))))
-      (unless (= expected actual)
-        (bad-content (string "expected " path " to have hash " expected " but got " actual))))
 
   (defn- unify-dir-content
     [dir-path content &opt st]
     (default st (os/lstat dir-path))
     (unless st
-      (bad-content (string "expected content at " dir-path)))
+      (error (string "expected content at " dir-path)))
     (unless (struct? content)
-      (bad-content (string "expected a directory descriptor struct at " dir-path)))
+      (error (string "expected a directory descriptor struct at " dir-path)))
     (unless (= (st :mode) :directory)
-      (bad-content (string "expected a directory at " dir-path)))
+      (error (string "expected a directory at " dir-path)))
     (def ents (os/dir dir-path))
     (unless (= (length ents) (length content))
-      (bad-content (string (length ents) " directory entries, expected " (length content) " at " dir-path)))
+      (error (string (length ents) " directory entries, expected " (length content) " at " dir-path)))
     (each ent-name ents
       (def ent-path (string dir-path "/" ent-name))
       (def ent-st (os/stat ent-path))
       (def expected-mode (get (content ent-name) :mode :file))
       (def expected-perms (get (content ent-name) :permissions "r--r--r--"))
       (unless (= (ent-st :mode) expected-mode)
-        (bad-content (string "expected " expected-mode " at " ent-path)))
+        (error (string "expected " expected-mode " at " ent-path)))
       (unless (= (ent-st :permissions) expected-perms)
-        (bad-content (string "expected perms " expected-perms " at " ent-path ", got " (ent-st :permissions))))
+        (error (string "expected perms " expected-perms " at " ent-path ", got " (ent-st :permissions))))
       (def subcontent (get (content ent-name) :content))
       (case (ent-st :mode)
         :directory
           (if (string? subcontent)
-            (check-hash ent-path subcontent true)
+            (hash/assert ent-path subcontent)
             (unify-dir-content ent-path subcontent))
         :link
           (unless (= subcontent (os/readlink ent-path))
-            (bad-content (string "link at " ent-path " expected to point to " subcontent)))
+            (error (string "link at " ent-path " expected to point to " subcontent)))
         :file
           (do
             (unless (string? subcontent)
-              (bad-content (string "content at " ent-path " must be a hash, got: " subcontent)))
-            (check-hash ent-path subcontent false))
-        (bad-content (string "unexpected mode " (ent-st :mode) " at " ent-path)))))
+              (error (string "content at " ent-path " must be a hash, got: " subcontent)))
+            (hash/assert ent-path subcontent))
+        (error (string "unexpected mode " (ent-st :mode) " at " ent-path)))))
   
-  (prompt :check-content 
     (cond
       (string? content)
-        (check-hash base-path content true)
+        (hash/assert base-path content)
       (struct? content)
         (unify-dir-content base-path content)
       (error (string/format "package content must be a hash or directory description struct")))
-    :ok))
+    nil)
 
 (defn- compute-build-dep-info
   [pkg]
@@ -551,9 +532,7 @@
         (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
 
         (when-let [content (pkg :content)]
-          (match (check-pkg-content (pkg :path) content)
-            [:fail msg]
-              (error msg)))
+          (assert-pkg-content (pkg :path) content))
 
         (defn pkg-refset-to-dirnames
           [pkg set-key]

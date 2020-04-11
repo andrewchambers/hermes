@@ -33,7 +33,7 @@
     (short-read-error))
   (jdn/decode buf))
 
-(defn- send-file-chunks
+(defn send-file
   [f to-send]
   (def buf @"")
   (defn send-file-chunks []
@@ -47,19 +47,19 @@
   (send-file-chunks))
 
 
-(defn recv-file-chunks
+(defn recv-file
   [f recv-to]
   (def buf @"")
   (defn recv-file-chunks []
-     (def sz (read-sz f))
-        (if (zero? sz)
-          nil
-          (do 
-            (file/read f sz (buffer/clear buf))
-            (unless (= (length buf) sz)
-              (short-read-error))
-            (file/write recv-to buf)
-            (recv-file-chunks))))
+    (def sz (read-sz f))
+      (if (zero? sz)
+        nil
+        (do 
+          (file/read f sz (buffer/clear buf))
+          (unless (= (length buf) sz)
+            (short-read-error))
+          (file/write recv-to buf)
+          (recv-file-chunks))))
   (recv-file-chunks))
 
 (defn send-dir
@@ -77,7 +77,7 @@
                    "-c" "-f" "-" "."]
                   :redirects [[stdout p2]])]
       (file/close p2)
-      (send-file-chunks f p1)
+      (send-file f p1)
       (unless (zero? (process/wait tar))
         (error "sending directory failed")))))
 
@@ -94,17 +94,7 @@
                    "-p" "-x" "-f" "-"]
                   :redirects [[stdin p1]])]
       (file/close p1)
-      (recv-file-chunks f p2)
+      (recv-file f p2)
       (file/close p2)
       (unless (zero? (process/wait tar))
         (error "receiving directory failed")))))
-
-(defn send-file
-  [f path]
-  (with [to-send (file/open path :rb)]
-    (send-file-chunks f to-send)))
-
-(defn recv-dir
-  [f path]
-  (with [to-recv (file/open path :wb)]
-    (recv-file-chunks f to-recv)))

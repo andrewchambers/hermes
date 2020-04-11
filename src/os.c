@@ -147,27 +147,6 @@ Janet jsetegid(int argc, Janet *argv) {
     return janet_wrap_nil();
 }
 
-Janet jfork(int argc, Janet *argv) {
-    (void)argv;
-    janet_fixarity(argc, 0);
-    return janet_wrap_integer(fork());
-}
-
-Janet jwaitpid(int32_t argc, Janet *argv) {
-    janet_fixarity(argc, 2);
-    int status = 0;
-    pid_t pid =
-        waitpid(janet_getinteger(argv, 0), &status, janet_getinteger(argv, 1));
-    if (pid == -1)
-        janet_panicf("waitpid - %s", strerror(errno));
-
-    Janet *t = janet_tuple_begin(2);
-    t[0] = janet_wrap_number(pid);
-    t[1] = janet_wrap_number(status);
-    return janet_wrap_tuple(janet_tuple_end(t));
-}
-
-
 static int listen_socket_gc(void *p, size_t len);
 static int listen_socket_get(void *p, Janet key, Janet *out);
 

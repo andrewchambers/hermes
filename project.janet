@@ -23,7 +23,7 @@
            "src/scratchvec.c"
            "src/sha1.c"
            "src/sha256.c"
-           "src/pathhash.c"
+           "src/hash.c"
            "src/pkgfreeze.c"
            "src/deps.c"
            "src/hashscan.c"

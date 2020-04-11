@@ -39,7 +39,7 @@ extern const JanetAbstractType pkg_type;
 
 Janet pkg_freeze(int32_t argc, Janet *argv);
 
-/* pathhash.c */
+/* hash.c */
 
 Janet sha256_dir_hash(int argc, Janet *argv);
 Janet sha256_file_hash(int argc, Janet *argv);
@@ -90,6 +90,4 @@ Janet jgetgid(int argc, Janet *argv);
 Janet jgetegid(int argc, Janet *argv);
 Janet jgetgroups(int argc, Janet *argv);
 Janet jgetgrnam(int argc, Janet *argv);
-Janet jfork(int argc, Janet *argv);
-Janet jwaitpid(int argc, Janet *argv);
 Janet unix_listen(int argc, Janet *argv);
