@@ -53,6 +53,11 @@
       :short "p"
       :required true
       :help "Path to marshalled package."}
+   "fetch-socket-path" 
+     {:kind :option
+      :short "f"
+      :required true
+      :help "Path to fetch socket to use during build."}
    "output" 
       {:kind :option
        :short "o"
@@ -85,7 +90,7 @@
 
   (def out-link (unless (parsed-args "no-out-link") (parsed-args "output")))
 
-  (pkgstore/build pkg out-link)
+  (pkgstore/build pkg (parsed-args "fetch-socket-path") out-link)
   
   (print (pkg :path)))
 

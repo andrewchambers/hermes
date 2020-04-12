@@ -399,7 +399,7 @@
     (os/rename tmplink root)))
 
 (defn build
-  [pkg &opt gc-root]
+  [pkg fetch-socket-path &opt gc-root]
   (assert *store-config*)
 
   (def store-mode (*store-config* :mode))
@@ -452,7 +452,7 @@
         (sh/$ ["mkdir" (pkg :path)])
 
         (when (= store-mode :single-user)
-          # XXX FIXME. We set the permissions to 777
+          # We set the permissions to 777
           # during a single user build to ensure the 
           # sandbox user can actually write to it. 
           # When initializing the store we mark it's
@@ -488,7 +488,8 @@
               (defn make-builder [pkg]
                 (fn do-build []
                   (os/cd "/tmp/build")
-                  (with-dyns [:pkg-out (pkg :path)]
+                  (with-dyns [:pkg-out (pkg :path)
+                              :fetch-socket "/tmp/fetch.sock"]
                     ((pkg :builder)))))
               (make-builder pkg)))
 
@@ -514,6 +515,7 @@
             ;(if (pkg :content) ["--disable_clone_newnet"] [])
             "--bindmount" (string bin ":/bin")
             "--bindmount" (string tmp ":/tmp")
+            ;(if (pkg :content) ["--bindmount" (string fetch-socket-path ":/tmp/fetch.sock")] [])
             "--bindmount" (let [hpkg-path (string *store-path* "/hpkg")]
                             (string hpkg-path ":" hpkg-path))
             "--user" (string (build-user :uid))

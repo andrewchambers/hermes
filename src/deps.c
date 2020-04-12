@@ -21,6 +21,7 @@ static void pkg_dependencies2(JanetTable *deps, JanetTable *seen, Janet v) {
     switch (janet_type(v)) {
     case JANET_NIL:
     case JANET_NUMBER:
+    case JANET_BUFFER:
     case JANET_STRING:
     case JANET_KEYWORD:
     case JANET_SYMBOL:

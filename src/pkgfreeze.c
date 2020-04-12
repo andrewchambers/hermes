@@ -420,7 +420,6 @@ static void init_pkg_hash_state(HashState *st, JanetTable *rreg) {
     st->seen_envs = NULL;
     st->rreg = rreg;
     janet_table_init(&st->seen, 0);
-    pushbytes(st, (const uint8_t *)JANET_VERSION, strlen(JANET_VERSION));
 }
 
 static JanetString finalize_pkg_hash_state(HashState *st) {
@@ -476,9 +475,18 @@ Janet pkg_freeze(int32_t argc, Janet *argv) {
     Pkg *pkg = janet_unwrap_abstract(argv[2]);
     HashState st;
     init_pkg_hash_state(&st, rreg);
-    hash_one(&st, janet_wrap_string(store_path), 0);
     hash_one(&st, pkg->name, 0);
-    hash_one(&st, pkg->builder, 0);
+    
+    if (janet_checktype(pkg->content, JANET_NIL)) {
+        pushbyte(&st, 0);
+        pushbytes(&st, (const uint8_t *)JANET_VERSION, strlen(JANET_VERSION));
+        hash_one(&st, janet_wrap_string(store_path), 0);
+        hash_one(&st, pkg->builder, 0);
+    } else {
+        pushbyte(&st, 1);
+        hash_one(&st, pkg->content, 0);
+    }
+
     hash_one(&st, pkg->forced_refs, 0);
     hash_one(&st, pkg->weak_refs, 0);
     hash_one(&st, pkg->extra_refs, 0);

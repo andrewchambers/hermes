@@ -188,7 +188,7 @@ static Janet listen_socket_accept(int argc, Janet *argv) {
     if (s < 0)
         janet_panicf("accept failed - %s", strerror(errno));
 
-    FILE *f = fdopen(s, "w+b");
+    FILE *f = fdopen(s, "wb+");
     if (!f) {
         int _errno = errno;
         close(s);
@@ -219,14 +219,16 @@ Janet unix_listen(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
     socket_path = (const char *)janet_getstring(argv, 0);
 
+
+    if ((size_t)janet_string_length(socket_path) >= sizeof(name.sun_path))
+        janet_panicf("path %s is too long for a unix socket", socket_path);
+
+
     int *ps = janet_abstract(&hermes_listen_socket_type, sizeof(int));
 
     *ps = socket(AF_UNIX, SOCK_STREAM, 0);
     if (*ps < 0)
         janet_panicf("unable to create socket - %s", strerror(errno));
-
-    if ((size_t)janet_string_length(socket_path) >= sizeof(name.sun_path))
-        janet_panicf("path %s is too long for a unix socket", socket_path);
 
     name.sun_family = AF_UNIX;
     strncpy(name.sun_path, socket_path, sizeof(name.sun_path));
@@ -242,4 +244,42 @@ Janet unix_listen(int argc, Janet *argv) {
         janet_panicf("unable to listen on socket %s - %s", socket_path, strerror(errno));
 
     return janet_wrap_abstract(ps);
+}
+
+Janet unix_connect(int argc, Janet *argv) {
+    const char *socket_path;
+    struct sockaddr_un name;
+    size_t size;
+    int s;
+
+    janet_fixarity(argc, 1);
+    socket_path = (const char *)janet_getstring(argv, 0);
+
+    if ((size_t)janet_string_length(socket_path) >= sizeof(name.sun_path))
+        janet_panicf("path %s is too long for a unix socket", socket_path);
+
+    s = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (s < 0)
+        janet_panicf("unable to create socket - %s", strerror(errno));
+
+    name.sun_family = AF_UNIX;
+    strncpy(name.sun_path, socket_path, sizeof(name.sun_path));
+    name.sun_path[sizeof (name.sun_path) - 1] = '\0';
+
+    size = (offsetof(struct sockaddr_un, sun_path)
+            + strlen (name.sun_path));
+
+    if (connect(s, (struct sockaddr *) &name, size) < 0) {
+        close(s);
+        janet_panicf("unable to connect socket to %s - %s", socket_path, strerror(errno));
+    }
+
+    FILE *f = fdopen(s, "wb+");
+    if (!f) {
+        int _errno = errno;
+        close(s);
+        janet_panicf("fdopen - %s", strerror(_errno));
+    }
+
+    return janet_makefile(f, JANET_FILE_WRITE|JANET_FILE_READ|JANET_FILE_BINARY);
 }

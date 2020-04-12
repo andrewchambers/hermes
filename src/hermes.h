@@ -91,3 +91,4 @@ Janet jgetegid(int argc, Janet *argv);
 Janet jgetgroups(int argc, Janet *argv);
 Janet jgetgrnam(int argc, Janet *argv);
 Janet unix_listen(int argc, Janet *argv);
+Janet unix_connect(int argc, Janet *argv);

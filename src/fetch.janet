@@ -12,14 +12,14 @@
     (os/exit 1))
 
   (defn fetch-from-url
-    [hash url]
+    [url hash]
     (def [pipe> pipe<] (process/pipe))
     (defer (do (:close pipe>)
                (:close pipe<))
       (with [errorf (file/temp)]
       (with [curl (process/spawn 
-                    ["curl" "--silent" "--show-error" "--fail" "-L" "-O" "-" url]
-                    :redirect [[stdout pipe<] [stderr errorf]])]
+                    ["curl" "--silent" "--show-error" "--fail" "-L" url]
+                    :redirects [[stdout pipe<] [stderr errorf]])]
         (:close pipe<)
         
         (def outf (file/temp))
@@ -45,41 +45,41 @@
             [:fail expected]
               (do
                 (protocol/send-msg c
-                  [:stderr (string/format "mirror gave hash %s, expected %s\n" expected hash)])
+                  [:stderr (string/format "expected hash %s, mirror gave %s\n" expected hash)])
                 (file/close outf)
                 nil))
           (do
             (file/seek errorf :set 0)
-            (def err-msg (string "fetch failed:\n" (file/read errorf :all) "\n"))
+            (def err-msg (string "fetch failed:\n" (file/read errorf :all)))
             (protocol/send-msg c [:stderr err-msg])))))))
 
   (defn fetch-from-mirrors
-    [hash mirrors out-path]
+    [mirrors hash]
     (defn fetch-from-mirrors
-      [mirrors]
+      []
       (if (empty? mirrors)
         (die (string "no mirrors provided " hash "\n"))
         (do
           (def m (array/pop mirrors))
           (protocol/send-msg c [:stderr (string "trying mirror " m "...\n")])
-          (if-let [outf (fetch-from-url c hash m)]
+          (if-let [outf (fetch-from-url m hash)]
             outf
-            (fetch-from-mirrors hash mirrors)))))
-    (fetch-from-mirrors hash mirrors out-path))
+            (fetch-from-mirrors)))))
+    (fetch-from-mirrors))
 
   (match (protocol/recv-msg c)
-    ([:fetch {:hash hash}] (string? hash))
+    ([:fetch-content hash] (string? hash))
       (do
         (protocol/send-msg c [:stderr (string "fetching " hash "...\n")])
         (if-let [mirrors (content-map hash)
-                 outf (fetch-from-mirrors c hash mirrors)]
+                 outf (fetch-from-mirrors mirrors hash)]
           (do
             (protocol/send-msg c :sending-content)
             (protocol/send-file c outf))
           (die (string "no known mirrors for " hash "\n"))))
     (die "fetch protocol error")))
 
-(defn fetch-server
+(defn serve
   [listener-socket content-map]
   (var active-workers @[])
   (defn handle-connections
@@ -90,16 +90,47 @@
         (file/close c)
         (array/push active-workers worker)
         (set active-workers (filter |(nil? ($ :exit-code)) active-workers)))
-      (do
-        (handle-fetch-client c content-map)
-        (os/exit 0)))
+      (try
+        (do
+          (handle-fetch-client c content-map)
+          (os/exit 0))
+        ([err f]
+          (debug/stacktrace f err)
+          (os/exit 1))))
     (handle-connections))
   (handle-connections))
 
-(defn spawn-fetch-server
+(defn spawn-server
   [listener-socket content-map]
   (if-let [child (process/fork)]
     child
     (do
-      (fetch-server listener-socket content-map)
+      (serve listener-socket content-map)
       (os/exit 0))))
+
+(defn fetch*
+  [hash dest]
+  (with [destf (file/open dest :wb)]
+  (with [c (_hermes/unix-connect (dyn :fetch-socket))]
+    (protocol/send-msg c [:fetch-content hash])
+    (while true
+      (match (protocol/recv-msg c)
+        [:error msg]
+          (error msg)
+        [:stderr ln]
+          (eprin ln)
+        :sending-content
+          (break)
+        (error "protocol error")))
+    (protocol/recv-file c destf)))
+  (hash/assert dest hash)
+  nil)
+
+# Repl helpers
+# (def content {"sha256:XXXX" @["https://google.com"]})
+# (def listener (_hermes/unix-listen "/tmp/fetch.sock"))
+# (fetch-server listener content)
+# (def c (_hermes/unix-connect "/tmp/fetch.sock"))
+# (protocol/send-msg c [:fetch {:hash "notfound"}])
+# (protocol/send-msg c [:fetch {:hash "sha256:XXXX"}])
+# (protocol/recv-msg c)

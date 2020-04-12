@@ -1,28 +1,17 @@
 
-(def bootstrap # XXX TODO rename bootstrap to seed.
-  (pkg
-    :content
-      "sha256:ff3ee8561ffe6f5845278eb605a98d314e1aa1c3de999c079038b268e72f240b"
-    :builder
-      (fn []
-        (unpack
-          (fetch
-            # TODO FIXME make this a tag.
-            "https://github.com/andrewchambers/hermes-seeds/raw/master/bootstrap.tar.gz")
-            :dest (dyn :pkg-out)))))
+(def seed
+  (fetch
+    :url
+      "https://github.com/andrewchambers/hermes-seeds/raw/master/bootstrap.tar.gz"
+    :hash
+      "sha256:e5f5e01df14fcc85f3a5a2d7b2c0aa1871005ed8a43f3d1279a3db628390dd15"))
 
-(defn- make-src-pkg
-  [&keys {:name name :url url :hash hash :fname fname}]
-  (default fname (last (string/split "/" url))) # XXX rfind would be nice in stdlib.
+(def seed-env
   (pkg
     :name
-      name
-    :content
-      {fname {:content hash}}
+      "seed"
     :builder
-      (fn []
-        (fetch url (string (dyn :pkg-out) "/" fname)))
-    ))
+      |(unpack (string (seed :path) "/bootstrap.tar.gz") :dest (dyn :pkg-out))))
 
 (defn- core-pkg
   [&keys {:name name :src src}]
@@ -30,14 +19,10 @@
     :name name
     :builder
     (fn []
-      (os/symlink (string (bootstrap :path) "/bin/dash") "/bin/sh")
-      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
-      # XXX we shouldn't need to do this at build time.
-      (def src-archive (->> (src :path)
-                            (os/dir)
-                            (filter |(not (string/has-prefix? "." $)))
-                            (first)))
-      (unpack (string (src :path) "/"  src-archive) :strip 1)
+      (os/symlink (string (seed-env :path) "/bin/dash") "/bin/sh")
+      (os/setenv "PATH" (string (seed-env :path) "/bin"))
+      (def src-archive (first (sh/glob (string (src :path) "/*"))))
+      (unpack src-archive :strip 1)
       (os/setenv "CC" "x86_64-linux-musl-cc --static")
       (os/setenv "CFLAGS" "-O2")
       (os/setenv "LDFLAGS" "--static")
@@ -48,7 +33,7 @@
 (defmacro defsrc
   [name &keys {:url url :hash hash}]
   (def src-pkg (gensym))
- ~(def ,name (,make-src-pkg :name ,(string name) :url ,url :hash ,hash)))
+ ~(def ,name (,fetch :url ,url :hash ,hash)))
 
 (defmacro defcore
   [name &keys {:src-url src-url :src-hash src-hash}]
@@ -56,7 +41,7 @@
   (def src-name (symbol name '-src))
  ~(def [,name ,src-name]
     (do
-      (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
+      (def ,src-pkg (,fetch :url ,src-url :hash ,src-hash))
       [(,core-pkg :name ,(string name) :src ,src-pkg) ,src-pkg])))
 
 (defcore dash
@@ -148,14 +133,8 @@
     :name "bzip2"
     :builder
     (fn []
-      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
-      # XXX we shouldn't need to do this at build time.
-      (def src-archive (->> (bzip2-src :path)
-                            (os/dir)
-                            (filter |(not (string/has-prefix? "." $)))
-                            (first)))
-                            
-      (unpack (string (bzip2-src :path) "/"  src-archive) :strip 1)
+      (os/setenv "PATH" (string (seed-env :path) "/bin"))
+      (unpack (first (sh/glob (string (bzip2-src :path) "/*"))) :strip 1)
       (->> (slurp "Makefile")
            (string/replace "SHELL=/bin/sh" "SHELL=sh")
            (spit "Makefile"))
@@ -264,31 +243,24 @@
 
 # XXX Why does musl cross make download this?
 (def- config.sub
-  (pkg
-    :content
-      {"config.sub" {:content "sha256:75d5d255a2a273b6e651f82eecfabf6cbcd8eaeae70e86b417384c8f4a58d8d3"}}
-    :builder
-      (fn []
-        (fetch
-          "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
-          (string (dyn :pkg-out) "/" "config.sub")))))
+  (fetch
+    :url "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
+    :hash "sha256:75d5d255a2a273b6e651f82eecfabf6cbcd8eaeae70e86b417384c8f4a58d8d3"
+    :file-name "config.sub"))
 
 (defn- install-musl-cross-make-gcc
   [post-extract post-install]
   (unless (os/lstat "/bin/sh")
     (os/symlink (string (dash :path) "/bin/dash") "/bin/sh"))
+  
   (defn archive-path
-        [src-pkg]
-        (->> (src-pkg :path)
-          (os/dir)
-          (filter |(not (string/has-prefix? "." $)))
-          (first)
-          (string (src-pkg :path) "/")))
+    [src-pkg]
+    (first (sh/glob (string (src-pkg :path) "/*"))))
 
   (os/setenv "PATH"
     (string
       (patch :path) "/bin:" # XXX busybox patch cannot apply these patches.
-      (bootstrap :path) "/bin"))
+      (seed-env :path) "/bin"))
   
   (unpack (archive-path musl-cross-make-src) :strip 1)
 
@@ -381,13 +353,13 @@
         (os/symlink "./x86_64-linux-musl-c++" "g++")
         (os/symlink "./x86_64-linux-musl-ld" "ld"))))
 
-(def bootstrap-out
+(def seed-out
   (pkg
-    :name "bootstrap-out"
+    :name "seed-out"
     :builder
     (fn []
       
-      (os/setenv "PATH" (string (bootstrap :path) "/bin"))
+      (os/setenv "PATH" (string (seed-env :path) "/bin"))
 
       (defn copy-bin
         [pkg]
@@ -421,8 +393,8 @@
       (os/symlink "./x86_64-linux-musl-c++" "c++")
       (os/cd start-dir)
 
-      (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./bootstrap.tar.gz" "."])
-      (sh/$ ["mv" "./bootstrap.tar.gz" (dyn :pkg-out)]))))
+      (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./seed.tar.gz" "."])
+      (sh/$ ["mv" "./seed.tar.gz" (dyn :pkg-out)]))))
 
 (defn std-pkg
   [&keys {
@@ -439,11 +411,7 @@
   (default unpack-phase
     (fn std-unpack-phase []
       (def src (dyn :pkg-src))
-      (def src-archive (->> (src :path)
-                            (os/dir)
-                            (filter |(not (string/has-prefix? "." $)))
-                            (first)))
-      (unpack (string (src :path) "/"  src-archive) :strip 1)))
+      (unpack (first (sh/glob (string (src :path) "/*"))) :strip 1)))
 
   (default configure-phase
     (fn std-configure-phase []
@@ -481,16 +449,15 @@
   (def src-name (symbol name '-src))
  ~(def [,name ,src-name]
     (do
-      (def ,src-pkg (,make-src-pkg :name ,(string src-name) :url ,src-url :hash ,src-hash))
-      [
-        (,std-pkg
+      (def ,src-pkg (,fetch :url ,src-url :hash ,src-hash))
+      [(,std-pkg
           :name ,(string name)
           :src ,src-pkg
           :bin-inputs ,bin-inputs
           :unpack-phase ,unpack-phase    
           :configure-phase ,configure-phase
           :install-phase ,install-phase)
-      ,src-pkg])))
+       ,src-pkg])))
 
 (defpkg janet
   :src-url "https://github.com/janet-lang/janet/archive/v1.7.0.tar.gz"

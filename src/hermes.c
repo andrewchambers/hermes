@@ -184,6 +184,7 @@ static const JanetReg cfuns[] = {
     {"setegid", jsetegid, NULL},
     {"getgroups", jgetgroups, NULL},
     {"unix-listen", unix_listen, NULL},
+    {"unix-connect", unix_connect, NULL},
     {NULL, NULL, NULL}
 };
 

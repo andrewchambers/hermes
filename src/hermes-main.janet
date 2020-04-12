@@ -1,9 +1,22 @@
 (import argparse)
 (import sh)
 (import process)
+(import ./fetch)
 (import ../build/_hermes)
 
 (var *store-path* "")
+
+
+(defn- clear-table 
+  [t]
+  (each k (keys t) # don't mutate while iterating.
+    (put t k 0))
+  t)
+
+(defn- clear-array
+  [a]
+  (array/remove a 0 (length a))
+  a)
 
 (defn pkg
   [&keys {
@@ -28,9 +41,11 @@
      (os/setenv k (environ k)))
   (os/cd cwd))
 
-(defn- fetch
-  [url &opt dest]
-  (error "fetch is not supported while loading package definitions"))
+(def *content-map* @{})
+
+(defn- fetch*
+  [hash dest]
+  (error "fetch* is not supported while loading package definitions"))
 
 (defn- unpack
   [path &opt &keys {
@@ -38,6 +53,40 @@
     :strip nstrip
   }]
   (error "unpack is not supported while loading package definitions"))
+
+(defn add-mirror
+  [hash url]
+  (if-let [mirrors (get *content-map* hash)]
+    (array/push mirrors url)
+    (put *content-map* hash @[url])))
+
+(defn fetch
+  [&keys {
+    :url url
+    :hash hash
+    :file-name file-name
+  }]
+
+  (default file-name (last (string/split "/" url))) # XXX rfind would be nice in stdlib.
+
+  (var url
+    (cond
+      (string? url)
+        url
+      (symbol? url)
+        (string url)
+      (error (string/format "fetch url must be a string or symbol, got %v" url))))
+
+  (add-mirror hash url)
+
+  (pkg
+    :name
+      file-name
+    :content
+      {file-name {:content hash}}
+    :builder
+      (fn []
+        (fetch* hash (string (dyn :pkg-out) "/" file-name)))))
 
 # TODO XXX This environment should be a sandbox, loading
 # packages should be effectively a pure operation. When the 
@@ -47,26 +96,18 @@
 (def pkg-loading-env (merge-into @{} root-env))
 (put pkg-loading-env 'pkg    @{:value pkg})
 (put pkg-loading-env 'fetch  @{:value fetch})
+(put pkg-loading-env 'fetch* @{:value fetch*})
+(put pkg-loading-env 'add-mirror @{:value add-mirror})
 (put pkg-loading-env 'unpack @{:value unpack})
 (put pkg-loading-env 'sh/$   @{:value sh/$})
 (put pkg-loading-env 'sh/$$  @{:value sh/$$})
 (put pkg-loading-env 'sh/$$_ @{:value sh/$$_})
 (put pkg-loading-env 'sh/$?  @{:value sh/$?})
+(put pkg-loading-env 'sh/glob  @{:value sh/glob})
 (def marshal-client-pkg-registry (invert (env-lookup pkg-loading-env)))
 
 (defn load-pkgs
   [fpath]
-
-  (defn clear-table 
-    [t]
-    (each k (keys t) # don't mutate while iterating.
-      (put t k 0))
-    t)
-  
-  (defn clear-array
-    [a]
-    (array/remove a 0 (length a))
-    a)
 
   (def saved-process-env (save-process-env)) # XXX shouldn't be needed with proper sandboxed env.
   (def saved-root-env (merge-into @{} root-env))
@@ -95,6 +136,8 @@
     (defn- check-. [x] (if (string/has-prefix? "." x) x))
     (clear-array module/paths)
     (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
+
+    (clear-table *content-map*)
 
     # XXX it would be nice to not exit on error, but raise an error.
     # this is easier for now though.
@@ -183,6 +226,13 @@
     (os/exit 1))
 
   (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
+  (os/chmod tmpdir 8r700)
+
+  (def fetch-socket-path (string tmpdir "/fetch.sock"))
+  (def fetch-socket (_hermes/unix-listen fetch-socket-path))
+  (os/chmod fetch-socket-path 8r777)
+  (def fetch-server (fetch/spawn-server fetch-socket *content-map*))
+
   (os/exit 
     (defer (sh/$ ["rm" "-rf" tmpdir])
       
@@ -190,7 +240,7 @@
       
       (spit pkg-path (marshal pkg marshal-client-pkg-registry))
       
-      (def pkgstore-cmd @["hermes-pkgstore" "build" "-s" *store-path* "-p" pkg-path])
+      (def pkgstore-cmd @["hermes-pkgstore" "build" "-f" fetch-socket-path "-s" *store-path* "-p" pkg-path])
       
       (when (parsed-args "no-out-link")
         (array/concat pkgstore-cmd ["-n"]))
