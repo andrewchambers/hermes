@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <fts.h>
 #include <signal.h>
@@ -49,14 +50,21 @@ finish:
         fts_close(ftsp);
 }
 
+static volatile sig_atomic_t interrupted = 0;
+
+static void sighandler(int signo) {
+    if (signo != SIGALRM) {
+        interrupted = 1;
+    }
+}
 
 int main()
 {
-    signal(SIGINT,SIG_IGN);
-    signal(SIGHUP,SIG_IGN);
-    signal(SIGQUIT,SIG_IGN);
-    signal(SIGPIPE,SIG_IGN);
-    signal(SIGTERM,SIG_IGN);
+    signal(SIGINT,sighandler);
+    signal(SIGHUP,sighandler);
+    signal(SIGQUIT,sighandler);
+    signal(SIGPIPE,sighandler);
+    signal(SIGTERM,sighandler);
 
     char template[] = "/tmp/hermes-tmpdir.XXXXXX";
     char *dir_name = mkdtemp(template);
@@ -66,7 +74,18 @@ int main()
     }
     if (printf("%s\n", dir_name) < 0)
         exit(1);
-    getchar();
+    char buf[1];
+    while (!interrupted) {
+        // alarm ensures cleanup happens
+        // even when term interrupts happened in window
+        // between mkdir and read.
+        signal(SIGALRM, sighandler);
+        alarm(5);
+        errno = 0;
+        int rc = read(STDIN_FILENO, buf, 1);
+        if (rc != 1 && errno != EINTR)
+            break;
+    }
     cleanup(dir_name);
     return 0;
 }
