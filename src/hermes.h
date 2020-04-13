@@ -48,6 +48,10 @@ Janet sha256_file_hash(int argc, Janet *argv);
 
 Janet hash_scan(int32_t argc, Janet *argv);
 
+/* storify.c */
+
+Janet storify(int32_t argc, Janet *argv);
+
 /* deps.c */
 
 Janet pkg_dependencies(int argc, Janet *argv);
@@ -90,5 +94,6 @@ Janet jgetgid(int argc, Janet *argv);
 Janet jgetegid(int argc, Janet *argv);
 Janet jgetgroups(int argc, Janet *argv);
 Janet jgetgrnam(int argc, Janet *argv);
+Janet jchown(int argc, Janet *argv);
 Janet unix_listen(int argc, Janet *argv);
 Janet unix_connect(int argc, Janet *argv);

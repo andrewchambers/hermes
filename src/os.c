@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include <janet.h>
 #include <alloca.h>
 #include <errno.h>
@@ -144,6 +144,13 @@ Janet jsetegid(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
     if (setegid(janet_getinteger(argv, 0)) != 0)
         janet_panicf("unable to set effective group id - %s", strerror(errno));
+    return janet_wrap_nil();
+}
+
+Janet jchown(int argc, Janet *argv) {
+    janet_fixarity(argc, 3);
+    if (chown((const char*)janet_getstring(argv, 0), janet_getinteger(argv, 1), janet_getinteger(argv, 2)) != 0)
+        janet_panicf("unable to chown - %s", strerror(errno));
     return janet_wrap_nil();
 }
 

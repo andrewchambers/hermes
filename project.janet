@@ -28,6 +28,7 @@
            "src/deps.c"
            "src/hashscan.c"
            "src/base16.c"
+           "src/storify.c"
            "src/os.c"])
 
 (declare-executable

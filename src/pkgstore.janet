@@ -475,10 +475,8 @@
 
           (when (= store-mode :multi-user)
             # Paths that need to be owned by the build user.
-            (sh/$ [
-              "chown"
-              (string (build-user :uid) ":" (build-user :gid))
-              bin build usr-bin tmp (pkg :path)]))
+            (each d [bin build usr-bin tmp]
+              (_hermes/chown d (build-user :uid) (build-user :gid))))
 
           (def do-build 
             # This awkward wrapper is related to the janet
@@ -524,14 +522,9 @@
 
         (def scanned-refs (ref-scan db pkg))
 
-        # Restore package owner.
-        (when (= store-mode :multi-user)
-          # Assuming our sandbox is strong, no processes from the locked build user are currently
-          # running, so they cannot be manipulating the build dir at this point in time.
-          (sh/$ ["chown" "-R" "0:0" (pkg :path)]))
-
-        # Set package permissions.
-        (sh/$ ["chmod" "-R" "a-w,a+r,a+X" (pkg :path)])
+        # Ensure files have correct owner, clear any permissions except execute.
+        # Also ensure the hardlink count is 1.
+        (_hermes/storify (pkg :path) (build-user :uid) (build-user :gid))
 
         (when-let [content (pkg :content)]
           (assert-pkg-content (pkg :path) content))
