@@ -1,11 +1,12 @@
 (import argparse)
 (import sh)
+(import path)
 (import process)
 (import ./fetch)
+(import ./hash)
 (import ../build/_hermes)
 
 (var *store-path* "")
-
 
 (defn- clear-table 
   [t]
@@ -88,6 +89,30 @@
       (fn []
         (fetch* hash (string (dyn :pkg-out) "/" file-name)))))
 
+(defn local-file*
+  [path &opt hash]
+  (default hash (hash/hash "sha256" path))
+  (fetch :url (string "file://" path) :hash hash))
+
+(defmacro local-file
+  [path &opt hash]
+  (def source (path/abspath (or (dyn :source) (path/join (os/cwd) "--expression"))))
+  (def basename (path/basename source))
+  (def dir (string/slice source 0 (- -2 (length basename))))   # XXX upstream path/dir.
+  (defn local-path
+    [path]
+    (def path
+      (cond
+        (string? path)
+          path
+        (symbol? path)
+          (string path)
+        (error "path must be a string or symbol")))
+    (when (path/abspath? path)
+      (error "path must be a relative path"))
+    (path/join dir path))
+  ~(,local-file* (,local-path ,path) ,hash))
+
 # TODO XXX This environment should be a sandbox, loading
 # packages should be effectively a pure operation. When the 
 # actual build takes place, we swap the sandbox stubs for the real implementaion.
@@ -96,6 +121,9 @@
 (def pkg-loading-env (merge-into @{} root-env))
 (put pkg-loading-env 'pkg    @{:value pkg})
 (put pkg-loading-env 'fetch  @{:value fetch})
+(put pkg-loading-env 'fetch* @{:value fetch*})
+(put pkg-loading-env 'local-file  @{:value local-file :macro true})
+(put pkg-loading-env 'local-file* @{:value local-file*})
 (put pkg-loading-env 'fetch* @{:value fetch*})
 (put pkg-loading-env 'add-mirror @{:value add-mirror})
 (put pkg-loading-env 'unpack @{:value unpack})
@@ -141,7 +169,7 @@
 
     # XXX it would be nice to not exit on error, but raise an error.
     # this is easier for now though.
-    (dofile fpath :exit true)))
+    (merge-into @{} pkg-loading-env (dofile fpath :exit true))))
 
 (defn- unknown-command
   []
@@ -217,7 +245,7 @@
   (def env 
     (if (parsed-args "module")
       (load-pkgs (parsed-args "module"))
-      root-env))
+      pkg-loading-env))
 
   (def pkg (eval-string-in-env (get parsed-args "expression" "default-pkg") env ))
 
