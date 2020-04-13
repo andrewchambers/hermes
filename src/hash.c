@@ -68,7 +68,7 @@ static int hasher_add_file(Hasher *h, FILE *f) {
 }
 
 static void hasher_add_file_contents_at_path(Hasher *h, const char *path) {
-   
+
     FILE *f = fopen(path, "rb");
     if (!f)
         janet_panicf("unable to open %s: %s", path, strerror(errno));
@@ -178,7 +178,7 @@ Janet sha256_file_hash(int argc, Janet *argv) {
     if (janet_checkabstract(argv[0], &janet_file_type)) {
         FILE *f = janet_unwrapfile(argv[0], NULL);
         if (!hasher_add_file(&h, f))
-          janet_panicf("error hashing file");
+            janet_panicf("error hashing file");
     } else if (janet_checktype(argv[0], JANET_STRING)) {
         hasher_add_file_contents_at_path(&h, (const char *)janet_unwrap_string(argv[0]));
     } else {

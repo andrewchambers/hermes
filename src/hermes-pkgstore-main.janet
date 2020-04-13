@@ -63,6 +63,14 @@
        :short "o"
        :default "./result"
        :help "Path to where package output link will be created."}
+   "parallelism" 
+      {:kind :option
+       :short "j"
+       :default "1"
+       :help "Pass a parallelism hint to package builders."}
+   "ttl" 
+      {:kind :option
+       :help "Only allow garbage collection of the package after ttl seconds."}
    "no-out-link"
      {:kind :flag
       :short "n"
@@ -88,14 +96,29 @@
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "pkg did did not return a valid package, got %v" pkg)))
 
-  (def out-link (unless (parsed-args "no-out-link") (parsed-args "output")))
+  (def parallelism (or (scan-number (parsed-args "parallelism"))
+                       (error "expected a number for --parallelism")))
 
-  (pkgstore/build pkg (parsed-args "fetch-socket-path") out-link)
+
+  (def ttl
+    (when (parsed-args "ttl")
+      (or (scan-number (parsed-args "ttl"))
+          (error "expected a number of seconds for --ttl"))))
+
+  (pkgstore/build
+    :pkg pkg
+    :fetch-socket-path (parsed-args "fetch-socket-path")
+    :gc-root (unless (parsed-args "no-out-link") (parsed-args "output"))
+    :parallelism parallelism
+    :ttl ttl)
   
   (print (pkg :path)))
 
 (def- gc-params
   ["Run the package garbage collector."
+   "ignore-ttl" 
+     {:kind :flag
+      :help "Ignore package ttl roots."}
    "store" 
      {:kind :option
       :short "s"
@@ -116,7 +139,7 @@
 
   (pkgstore/open-pkg-store store)
 
-  (pkgstore/gc))
+  (pkgstore/gc :ignore-ttl (parsed-args "ignore-ttl")))
 
 (def- send-params
   ["Send a package closure over stdin/stdout with the send/recv protocol."

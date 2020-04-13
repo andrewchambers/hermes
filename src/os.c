@@ -154,6 +154,12 @@ Janet jchown(int argc, Janet *argv) {
     return janet_wrap_nil();
 }
 
+// Avoid janet vm cleanup in builtin os/exit.
+Janet jexit(int argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+    exit(janet_getinteger(argv, 0));
+}
+
 static int listen_socket_gc(void *p, size_t len);
 static int listen_socket_get(void *p, Janet key, Janet *out);
 

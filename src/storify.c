@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <utime.h>
 #include <string.h>
 #include <unistd.h>
 #include <fts.h>
@@ -39,6 +40,12 @@ Janet storify(int argc, Janet *argv) {
     if (!*pfs)
         janet_panicf("unable to open directory");
 
+
+    struct utimbuf t;
+
+    t.actime = 0;
+    t.modtime = 0;
+
     while(1) {
         fent = fts_read(*pfs);
         if (!fent) {
@@ -50,13 +57,15 @@ Janet storify(int argc, Janet *argv) {
         case FTS_SL:
         case FTS_F:
         case FTS_DP:
-            if (!lchown(fent->fts_accpath, uid, gid))
-                janet_panicf("unable to storify %s - lchown=%s", fent->fts_accpath, strerror(errno));
-            if (fent->fts_info != FTS_SL)
+            if (lchown(fent->fts_accpath, uid, gid) != 0)
+                janet_panicf("unable to storify %s - lchown - %s", fent->fts_accpath, strerror(errno));
+
+            if (fent->fts_info != FTS_SL) {
+                if (utime(fent->fts_accpath, &t) != 0)
+                    janet_panicf("unable to storify %s - utime - %s", fent->fts_accpath, strerror(errno));
                 if (chmod(fent->fts_accpath, (fent->fts_statp->st_mode&0111)|0444))
-                    janet_panicf("unable to storify %s - lchmod=%s", fent->fts_accpath, strerror(errno));
-            if (fent->fts_info == FTS_F && fent->fts_statp->st_nlink != 1)
-                janet_panicf("%s%s has multiple hardlinks, this is forbidden", fent->fts_path, fent->fts_name);
+                    janet_panicf("unable to storify %s - chmod - %s", fent->fts_accpath, strerror(errno));
+            }
             break;
         case FTS_D:
             /* handled above above */

@@ -134,7 +134,7 @@
       (sqlite3/eval db "begin transaction;")
       (when (empty? (sqlite3/eval db "select name from sqlite_master where type='table' and name='Meta'"))
         (sqlite3/eval db "create table Roots(LinkPath text primary key);")
-        (sqlite3/eval db "create table Pkgs(Hash text primary key, Name text);")
+        (sqlite3/eval db "create table Pkgs(Hash text primary key, Name text, TTLExpires integer);")
         (sqlite3/eval db "create table Meta(Key text primary key, Value text);")
         (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
         (sqlite3/eval db "commit;"))))
@@ -157,6 +157,9 @@
   (if name
     (string hash "-" name)
     (string hash)))
+
+(defn- pkg-path-from-parts [hash name]
+  (string *store-path* "/hpkg/" (pkg-dir-name-from-parts hash name)))
 
 (defn- pkg-parts-from-dir-name
   [dir-name]
@@ -239,12 +242,21 @@
   visited)
 
 (defn gc
-  []
+  [&keys {
+    :ignore-ttl ignore-ttl
+  }]
   (assert *store-config*)
   (with [gc-lock (acquire-gc-lock :block :exclusive)]
   (with [db (open-db)]
 
     (def root-pkg-paths @[])
+
+    (defn process-ttl-roots
+      []
+      (each row (sqlite3/eval db
+                   "select * from Pkgs where TTLExpires is not null and TTLExpires > :now;"
+                   {:now (os/time)})
+        (array/push root-pkg-paths (pkg-path-from-parts (row :Hash) (row :Name)))))
 
     (defn process-roots
       []
@@ -263,6 +275,8 @@
         (sqlite3/eval db "delete from Roots where LinkPath = :root;" {:root root}))
       (sqlite3/eval db "commit;"))
     
+    (unless ignore-ttl
+      (process-ttl-roots))
     (process-roots)
     (def visited (walk-closure root-pkg-paths))
 
@@ -399,7 +413,13 @@
     (os/rename tmplink root)))
 
 (defn build
-  [pkg fetch-socket-path &opt gc-root]
+  [&keys {
+     :pkg pkg
+     :fetch-socket-path fetch-socket-path
+     :gc-root gc-root
+     :parallelism parallelism
+     :ttl ttl
+   }]
   (assert *store-config*)
 
   (def store-mode (*store-config* :mode))
@@ -483,13 +503,14 @@
             # internals, we want a detached env with as few
             # slots referenced as possible.
             (do
-              (defn make-builder [pkg]
+              (defn make-builder [pkg parallelism]
                 (fn do-build []
                   (os/cd "/tmp/build")
                   (with-dyns [:pkg-out (pkg :path)
+                              :parallelism parallelism
                               :fetch-socket "/tmp/fetch.sock"]
                     ((pkg :builder)))))
-              (make-builder pkg)))
+              (make-builder pkg parallelism)))
 
           (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
           (put registry (pkg :builder) nil)
@@ -547,10 +568,8 @@
         }))
 
         (os/chmod (pkg :path) 8r555)
-
         (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
           {:hash (pkg :hash) :name (pkg :name)})
-
       nil))
 
     (while true
@@ -560,9 +579,13 @@
       (eprintf "waiting for more work...")
       (os/sleep 0.5))
 
+    (when ttl
+      (sqlite3/eval db "Update Pkgs set TTLExpires = :expires where Hash = :hash;"
+        {:hash (pkg :hash) :expires (+ (os/time) ttl)}))
+
     (when gc-root
       (add-root db (pkg :path) gc-root)))))
-    
+
     (optimistic-build-lock-cleanup)
     
     nil)

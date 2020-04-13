@@ -2,16 +2,16 @@
 (def seed
   (fetch
     :url
-      "https://github.com/andrewchambers/hermes-seeds/raw/master/bootstrap.tar.gz"
+      "https://github.com/andrewchambers/hermes-seeds/raw/master/seed.tar.gz"
     :hash
-      "sha256:e5f5e01df14fcc85f3a5a2d7b2c0aa1871005ed8a43f3d1279a3db628390dd15"))
+      "sha256:3d850f281e907d3b78599612ee1a17e63084b98947799a22a3e2a938db98e30a"))
 
 (def seed-env
   (pkg
     :name
       "seed"
     :builder
-      |(unpack (string (seed :path) "/bootstrap.tar.gz") :dest (dyn :pkg-out))))
+      |(unpack (string (seed :path) "/seed.tar.gz") :dest (dyn :pkg-out))))
 
 (defn- core-pkg
   [&keys {:name name :src src}]
@@ -22,12 +22,12 @@
       (os/symlink (string (seed-env :path) "/bin/dash") "/bin/sh")
       (os/setenv "PATH" (string (seed-env :path) "/bin"))
       (def src-archive (first (sh/glob (string (src :path) "/*"))))
-      (unpack src-archive :strip 1)
-      (os/setenv "CC" "x86_64-linux-musl-cc --static")
-      (os/setenv "CFLAGS" "-O2")
+      (unpack src-archive)
+      (os/setenv "CC" "x86_64-linux-musl-gcc --static")
+      (os/setenv "CFLAGS" "-O3 -fstack-protector")
       (os/setenv "LDFLAGS" "--static")
-      (sh/$ ["sh" "./configure" "--enable-shared=no" "--prefix" (dyn :pkg-out)])
-      (sh/$ ["make"])
+      (sh/$ ["dash" "./configure" "--enable-shared=no" "--prefix" (dyn :pkg-out)])
+      (sh/$ ["make" (string "-j" (dyn :parallelism))])
       (sh/$ ["make" "install"]))))
 
 (defmacro defsrc
@@ -134,13 +134,13 @@
     :builder
     (fn []
       (os/setenv "PATH" (string (seed-env :path) "/bin"))
-      (unpack (first (sh/glob (string (bzip2-src :path) "/*"))) :strip 1)
+      (unpack (first (sh/glob (string (bzip2-src :path) "/*"))))
       (->> (slurp "Makefile")
            (string/replace "SHELL=/bin/sh" "SHELL=sh")
            (spit "Makefile"))
 
       (sh/$ ["make" "install"
-               "CC=x86_64-linux-musl-cc --static"
+               "CC=x86_64-linux-musl-gcc --static"
                "CFLAGS=-O2"
                "LDFLAGS=--static"
                (string "PREFIX=" (dyn :pkg-out))]))))
@@ -259,10 +259,10 @@
 
   (os/setenv "PATH"
     (string
-      (patch :path) "/bin:" # XXX busybox patch cannot apply these patches.
+      (bzip2 :path) "/bin:"
       (seed-env :path) "/bin"))
   
-  (unpack (archive-path musl-cross-make-src) :strip 1)
+  (unpack (archive-path musl-cross-make-src))
 
   (os/mkdir "sources")
   (each src [gcc-src binutils-src musl-src gmp-src mpc-src mpfr-src linux-hdrs-src]
@@ -273,7 +273,7 @@
     (string
       "TARGET=x86_64-linux-musl\n"
       "OUTPUT=" (dyn :pkg-out) "\n"
-      "COMMON_CONFIG += CC=\"cc -static --static\" CXX=\"c++ -static --static\"\n"
+      "COMMON_CONFIG += CC=\"x86_64-linux-musl-gcc -static --static\" CXX=\"x86_64-linux-musl-g++ -static --static\"\n"
       "COMMON_CONFIG += CFLAGS=\"-O3\" CXXFLAGS=\"-O3\" LDFLAGS=\"-s\"\n"
       "DL_CMD=false\n"
       "COWPATCH=" (os/cwd) "/cowpatch.sh\n"))
@@ -281,7 +281,7 @@
   (sh/$ ["make" "extract_all"])
   (when post-extract
     (post-extract))
-  (sh/$ ["make" "install" "-j8"])
+  (sh/$ ["make" "install" (string "-j" (dyn :parallelism)) ])
   (when post-install
     (post-install)))
 
@@ -347,8 +347,7 @@
         # This could probably be a loop.
         (os/symlink "./x86_64-linux-musl-ar" "ar")
         (os/symlink "./x86_64-linux-musl-ar" "ranlib")
-        (os/symlink "./x86_64-linux-musl-cc" "cc")
-        (os/symlink "./x86_64-linux-musl-cc" "gcc")
+        (os/symlink "./x86_64-linux-musl-gcc" "cc")
         (os/symlink "./x86_64-linux-musl-c++" "c++")
         (os/symlink "./x86_64-linux-musl-c++" "g++")
         (os/symlink "./x86_64-linux-musl-ld" "ld"))))
@@ -376,7 +375,6 @@
       (copy-bin make)
       (copy-bin tar)
       (copy-bin gzip)
-      (copy-bin bzip2)
       (copy-bin xz)
       (copy-bin grep)
       (copy-bin sed)
@@ -388,13 +386,26 @@
       (def start-dir (os/cwd))
       (os/cd (string (dyn :pkg-out) "/bin"))
       (os/symlink "./dash" "sh")
-      (os/symlink "./x86_64-linux-musl-ar" "ar")
-      (os/symlink "./x86_64-linux-musl-cc" "cc")
+      (os/symlink "./x86_64-linux-musl-ar"  "ar")
+      (os/symlink "./x86_64-linux-musl-gcc" "cc")
       (os/symlink "./x86_64-linux-musl-c++" "c++")
       (os/cd start-dir)
 
       (sh/$ ["tar" "-C" (dyn :pkg-out) "-cz" "-f" "./seed.tar.gz" "."])
       (sh/$ ["mv" "./seed.tar.gz" (dyn :pkg-out)]))))
+
+(defn std-unpack-phase []
+  (def src (dyn :pkg-src))
+  (unpack (first (sh/glob (string (src :path) "/*")))))
+
+(defn std-configure-phase []
+  (os/setenv "CFLAGS" "-O3 -fstack-protector")
+  (when (os/stat "./configure")
+    (sh/$ ["./configure" "--prefix" (dyn :pkg-out)])))
+
+(defn std-install-phase []
+  (sh/$ ["make" (string "-j" (dyn :parallelism))])
+  (sh/$ ["make" "install" (string "PREFIX=" (dyn :pkg-out))]))
 
 (defn std-pkg
   [&keys {
@@ -407,21 +418,9 @@
   }]
 
   (default bin-inputs [])
-  
-  (default unpack-phase
-    (fn std-unpack-phase []
-      (def src (dyn :pkg-src))
-      (unpack (first (sh/glob (string (src :path) "/*"))) :strip 1)))
-
-  (default configure-phase
-    (fn std-configure-phase []
-      (when (os/stat "./configure")
-        (sh/$ ["./configure" "--prefix" (dyn :pkg-out)]))))
-
-  (default install-phase
-    (fn std-install-phase []
-      (sh/$ ["make"])
-      (sh/$ ["make" "install" (string "PREFIX=" (dyn :pkg-out))])))
+  (default unpack-phase std-unpack-phase)
+  (default configure-phase std-configure-phase)
+  (default install-phase std-install-phase)
 
   (pkg
     :name name

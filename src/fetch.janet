@@ -75,28 +75,31 @@
                  outf (fetch-from-mirrors mirrors hash)]
           (do
             (protocol/send-msg c :sending-content)
-            (protocol/send-file c outf))
+            (protocol/send-file c outf)
+            (file/close outf))
           (die (string "no known mirrors for " hash "\n"))))
     (die "fetch protocol error")))
 
 (defn serve
   [listener-socket content-map]
-  (var active-workers @[])
   (defn handle-connections
     []
     (def c (:accept listener-socket))
-    (if-let [worker (process/fork)]
+    (if-let [child (process/fork)]
       (do
         (file/close c)
-        (array/push active-workers worker)
-        (set active-workers (filter |(nil? ($ :exit-code)) active-workers)))
-      (try
-        (do
-          (handle-fetch-client c content-map)
-          (os/exit 0))
-        ([err f]
-          (debug/stacktrace f err)
-          (os/exit 1))))
+        (process/wait child))
+      # Double fork to prevent zombies and ensure
+      # we cleanup all resources asap.
+      (if-let [child (process/fork)]
+        (_hermes/exit 0)
+        (try
+          (do
+            (handle-fetch-client c content-map)
+            (_hermes/exit 0))
+          ([err f]
+            (debug/stacktrace f err)
+            (_hermes/exit 1)))))
     (handle-connections))
   (handle-connections))
 

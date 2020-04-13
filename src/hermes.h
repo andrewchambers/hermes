@@ -60,6 +60,10 @@ Janet pkg_dependencies(int argc, Janet *argv);
 
 void base16_encode(char *outbuf, char *inbuf, size_t in_length);
 
+/* unpack.c */
+
+Janet primitive_unpack(int argc, Janet *argv);
+
 /*  scratchvec.c */
 
 #define scratch_v_free(v)         (((v) != NULL) ? (janet_sfree(scratch_v__raw(v)), 0) : 0)
@@ -95,5 +99,6 @@ Janet jgetegid(int argc, Janet *argv);
 Janet jgetgroups(int argc, Janet *argv);
 Janet jgetgrnam(int argc, Janet *argv);
 Janet jchown(int argc, Janet *argv);
+Janet jexit(int argc, Janet *argv);
 Janet unix_listen(int argc, Janet *argv);
 Janet unix_connect(int argc, Janet *argv);

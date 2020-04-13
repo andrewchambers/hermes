@@ -51,7 +51,7 @@
 (defn- unpack
   [path &opt &keys {
     :dest dest
-    :strip nstrip
+    :unwrap unwrap
   }]
   (error "unpack is not supported while loading package definitions"))
 
@@ -231,6 +231,14 @@
       :short "o"
       :default "./result"
       :help "Path to where package output link will be created."}
+   "parallelism" 
+      {:kind :option
+       :short "j"
+       :default "1"
+       :help "Pass a parallelism hint to package builders."}
+   "ttl" 
+      {:kind :option
+       :help "Only allow garbage collection of the package after ttl seconds."}
    "no-out-link" 
      {:kind :flag
       :short "n"
@@ -261,6 +269,8 @@
   (os/chmod fetch-socket-path 8r777)
   (def fetch-server (fetch/spawn-server fetch-socket *content-map*))
 
+  (def parallelism (parsed-args "parallelism"))
+
   (os/exit 
     (defer (sh/$ ["rm" "-rf" tmpdir])
       
@@ -268,10 +278,13 @@
       
       (spit pkg-path (marshal pkg marshal-client-pkg-registry))
       
-      (def pkgstore-cmd @["hermes-pkgstore" "build" "-f" fetch-socket-path "-s" *store-path* "-p" pkg-path])
+      (def pkgstore-cmd @["hermes-pkgstore" "build" "-j" parallelism "-f" fetch-socket-path "-s" *store-path* "-p" pkg-path])
       
       (when (parsed-args "no-out-link")
         (array/concat pkgstore-cmd ["-n"]))
+
+      (when (parsed-args "ttl")
+        (array/concat pkgstore-cmd ["--ttl" (parsed-args "ttl")]))
 
       (when (parsed-args "output")
         (array/concat pkgstore-cmd ["-o" (parsed-args "output")]))
@@ -279,7 +292,10 @@
       (process/run pkgstore-cmd))))
 
 (def- gc-params
-  ["Run the package garbage collector."])
+  ["Run the package garbage collector."
+    "ignore-ttl" 
+      {:kind :flag
+       :help "Ignore package ttl roots."}])
 
 (defn- gc
   []
@@ -287,7 +303,8 @@
   (unless parsed-args
     (os/exit 1))
   
-  (def pkgstore-cmd @["hermes-pkgstore" "gc" "-s" *store-path*])
+  (def pkgstore-cmd
+    @["hermes-pkgstore" "gc" "-s" *store-path* ;(if (parsed-args "ignore-ttl") ["--ignore-ttl"] [])])
   (os/exit (process/run pkgstore-cmd)))
 
 (def- cp-params

@@ -476,7 +476,7 @@ Janet pkg_freeze(int32_t argc, Janet *argv) {
     HashState st;
     init_pkg_hash_state(&st, rreg);
     hash_one(&st, pkg->name, 0);
-    
+
     if (janet_checktype(pkg->content, JANET_NIL)) {
         pushbyte(&st, 0);
         pushbytes(&st, (const uint8_t *)JANET_VERSION, strlen(JANET_VERSION));

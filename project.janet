@@ -29,7 +29,9 @@
            "src/hashscan.c"
            "src/base16.c"
            "src/storify.c"
-           "src/os.c"])
+           "src/os.c"
+           "src/unpack.c"]
+  :lflags ["-larchive"])
 
 (declare-executable
   :name "hermes"

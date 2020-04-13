@@ -1,17 +1,34 @@
 (import sh)
+(import path)
 (import ./fetch)
+(import ../build/_hermes)
 
 (defn- unpack
-  [path &opt &keys {
+  [archive &opt &keys {
     :dest dest
-    :strip nstrip
+    :unwrap unwrap
   }]
   (default dest "./")
-  (default nstrip 0)
+  (default unwrap true)
+  (def archive (path/abspath archive))
+  (eprintf "unpacking %s to %s..." archive dest)
   (unless (os/stat dest)
     (os/mkdir dest))
-  (def tar-bin (comptime (sh/$$_ ["which" "tar"])))
-  (sh/$ [tar-bin (string "--strip-components=" nstrip) "-avxf" path "-C" dest]))
+  (def start-dir (os/cwd))
+  (defer (os/cd start-dir)
+    (os/cd dest)
+    (_hermes/primitive-unpack archive)
+    (when unwrap
+      (def ents (os/dir "./"))
+      (when (and
+              (= (length ents) 1)
+              (= :directory ((os/stat (string "./" (first ents))) :mode)))
+        (def d (first ents))
+        (os/rename d ".hermes.unpack.tmp")
+        (each child (os/dir ".hermes.unpack.tmp")
+          (os/rename (string "./.hermes.unpack.tmp/" child) child))
+        (os/rmdir ".hermes.unpack.tmp"))))
+  nil)
 
 (def builder-env (make-env root-env))
 (put builder-env 'pkg
