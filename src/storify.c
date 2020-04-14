@@ -54,8 +54,10 @@ Janet storify(int argc, Janet *argv) {
             break;
         }
         switch (fent->fts_info) {
-        case FTS_SL:
         case FTS_F:
+        case FTS_SL:
+        case FTS_SLNONE:
+        case FTS_DEFAULT:
         case FTS_DP:
             if (lchown(fent->fts_accpath, uid, gid) != 0)
                 janet_panicf("unable to storify %s - lchown - %s", fent->fts_accpath, strerror(errno));
@@ -63,7 +65,7 @@ Janet storify(int argc, Janet *argv) {
             if (fent->fts_info != FTS_SL) {
                 if (utime(fent->fts_accpath, &t) != 0)
                     janet_panicf("unable to storify %s - utime - %s", fent->fts_accpath, strerror(errno));
-                if (chmod(fent->fts_accpath, (fent->fts_statp->st_mode&0111)|0444))
+                if (chmod(fent->fts_accpath, (fent->fts_statp->st_mode&0111)|0444) != 0)
                     janet_panicf("unable to storify %s - chmod - %s", fent->fts_accpath, strerror(errno));
             }
             break;

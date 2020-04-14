@@ -2,8 +2,10 @@
 (import sh)
 (import path)
 (import process)
+(import ./tempdir)
 (import ./fetch)
 (import ./hash)
+(import ./builtins)
 (import ../build/_hermes)
 
 (var *store-path* "")
@@ -19,17 +21,6 @@
   (array/remove a 0 (length a))
   a)
 
-(defn pkg
-  [&keys {
-    :builder builder
-    :name name
-    :content content
-    :force-refs force-refs
-    :extra-refs extra-refs
-    :weak-refs weak-refs
-  }]
-  (_hermes/pkg builder name content force-refs extra-refs weak-refs))
-
 (defn- save-process-env
   []
   {:cwd (os/cwd)
@@ -42,97 +33,6 @@
      (os/setenv k (environ k)))
   (os/cd cwd))
 
-(def *content-map* @{})
-
-(defn- fetch*
-  [hash dest]
-  (error "fetch* is not supported while loading package definitions"))
-
-(defn- unpack
-  [path &opt &keys {
-    :dest dest
-    :unwrap unwrap
-  }]
-  (error "unpack is not supported while loading package definitions"))
-
-(defn add-mirror
-  [hash url]
-  (if-let [mirrors (get *content-map* hash)]
-    (array/push mirrors url)
-    (put *content-map* hash @[url])))
-
-(defn fetch
-  [&keys {
-    :url url
-    :hash hash
-    :file-name file-name
-  }]
-
-  (default file-name (last (string/split "/" url))) # XXX rfind would be nice in stdlib.
-
-  (var url
-    (cond
-      (string? url)
-        url
-      (symbol? url)
-        (string url)
-      (error (string/format "fetch url must be a string or symbol, got %v" url))))
-
-  (add-mirror hash url)
-
-  (pkg
-    :name
-      file-name
-    :content
-      {file-name {:content hash}}
-    :builder
-      (fn []
-        (fetch* hash (string (dyn :pkg-out) "/" file-name)))))
-
-(defn local-file*
-  [path &opt hash]
-  (default hash (hash/hash "sha256" path))
-  (fetch :url (string "file://" path) :hash hash))
-
-(defmacro local-file
-  [path &opt hash]
-  (def source (path/abspath (or (dyn :source) (path/join (os/cwd) "--expression"))))
-  (def basename (path/basename source))
-  (def dir (string/slice source 0 (- -2 (length basename))))   # XXX upstream path/dir.
-  (defn local-path
-    [path]
-    (def path
-      (cond
-        (string? path)
-          path
-        (symbol? path)
-          (string path)
-        (error "path must be a string or symbol")))
-    (when (path/abspath? path)
-      (error "path must be a relative path"))
-    (path/join dir path))
-  ~(,local-file* (,local-path ,path) ,hash))
-
-# TODO XXX This environment should be a sandbox, loading
-# packages should be effectively a pure operation. When the 
-# actual build takes place, we swap the sandbox stubs for the real implementaion.
-# TODO XXX load from .hpkg extension.
-
-(def pkg-loading-env (merge-into @{} root-env))
-(put pkg-loading-env 'pkg    @{:value pkg})
-(put pkg-loading-env 'fetch  @{:value fetch})
-(put pkg-loading-env 'fetch* @{:value fetch*})
-(put pkg-loading-env 'local-file  @{:value local-file :macro true})
-(put pkg-loading-env 'local-file* @{:value local-file*})
-(put pkg-loading-env 'fetch* @{:value fetch*})
-(put pkg-loading-env 'add-mirror @{:value add-mirror})
-(put pkg-loading-env 'unpack @{:value unpack})
-(put pkg-loading-env 'sh/$   @{:value sh/$})
-(put pkg-loading-env 'sh/$$  @{:value sh/$$})
-(put pkg-loading-env 'sh/$$_ @{:value sh/$$_})
-(put pkg-loading-env 'sh/$?  @{:value sh/$?})
-(put pkg-loading-env 'sh/glob  @{:value sh/glob})
-(def marshal-client-pkg-registry (invert (env-lookup pkg-loading-env)))
 
 (defn load-pkgs
   [fpath]
@@ -155,7 +55,7 @@
            (restore-process-env saved-process-env))
     
     (clear-table root-env)
-    (merge-into root-env pkg-loading-env)
+    (merge-into root-env builtins/hermes-env)
 
     # Clear module cache.
     (clear-table module/cache)
@@ -165,11 +65,11 @@
     (clear-array module/paths)
     (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
 
-    (clear-table *content-map*)
+    (clear-table builtins/*content-map*)
 
     # XXX it would be nice to not exit on error, but raise an error.
     # this is easier for now though.
-    (merge-into @{} pkg-loading-env (dofile fpath :exit true))))
+    (merge-into @{} builtins/hermes-env (dofile fpath :exit true))))
 
 (defn- unknown-command
   []
@@ -222,6 +122,9 @@
      {:kind :option
       :short "m"
       :help "Path to the module in which to run 'expression'."}
+   "build-host"
+     {:kind :option
+      :help "Transparently build on a remote host."}
    "expression"
      {:kind :option
       :short "e"
@@ -253,43 +156,114 @@
   (def env 
     (if (parsed-args "module")
       (load-pkgs (parsed-args "module"))
-      pkg-loading-env))
+      builtins/hermes-env))
 
-  (def pkg (eval-string-in-env (get parsed-args "expression" "default-pkg") env ))
+  (def pkg (eval-string-in-env (get parsed-args "expression" "default-pkg") env))
 
   (unless (= (type pkg) :hermes/pkg)
     (eprintf "expression did not return a valid package, got %v" pkg)
     (os/exit 1))
 
-  (def tmpdir (string (sh/$$_ ["mktemp" "-d"])))
-  (os/chmod tmpdir 8r700)
+  (def tmpdir (tempdir/tempdir))
+  (os/chmod (tmpdir :path) 8r700)
 
-  (def fetch-socket-path (string tmpdir "/fetch.sock"))
+  (def fetch-socket-path (string (tmpdir :path) "/fetch.sock"))
   (def fetch-socket (_hermes/unix-listen fetch-socket-path))
   (os/chmod fetch-socket-path 8r777)
-  (def fetch-server (fetch/spawn-server fetch-socket *content-map*))
+  (def fetch-server (fetch/spawn-server fetch-socket builtins/*content-map*))
 
   (def parallelism (parsed-args "parallelism"))
 
-  (os/exit 
-    (defer (sh/$ ["rm" "-rf" tmpdir])
-      
-      (def pkg-path (string tmpdir "/hermes-build.pkg"))
-      
-      (spit pkg-path (marshal pkg marshal-client-pkg-registry))
-      
-      (def pkgstore-cmd @["hermes-pkgstore" "build" "-j" parallelism "-f" fetch-socket-path "-s" *store-path* "-p" pkg-path])
-      
-      (when (parsed-args "no-out-link")
-        (array/concat pkgstore-cmd ["-n"]))
+  (def pkg-path (string (tmpdir :path) "/hermes-build.pkg"))
 
-      (when (parsed-args "ttl")
-        (array/concat pkgstore-cmd ["--ttl" (parsed-args "ttl")]))
+  (spit pkg-path (marshal pkg builtins/registry))
 
-      (when (parsed-args "output")
-        (array/concat pkgstore-cmd ["-o" (parsed-args "output")]))
-      
-      (process/run pkgstore-cmd))))
+  (def exit-status
+    (if-let [build-host (parsed-args "build-host")]
+      (do
+        (def rtmpdir (tempdir/tempdir build-host))
+        (def rfetch-socket-path (string (rtmpdir :path) "/fetch.sock"))
+        (def rpkg-path (string (rtmpdir :path) "/hermes-build.pkg"))
+        (def rroot (string (rtmpdir :path) "/build.root"))
+        (def fetch-proxy-cmd
+          @["ssh"
+            "-oStreamLocalBindMask=0111"
+            "-oBatchMode=yes"
+            "-oExitOnForwardFailure=yes"
+            "-N"
+            "-R" (string rfetch-socket-path ":" fetch-socket-path)
+            build-host])
+        (eprintf "%j" fetch-proxy-cmd)
+        (def fetch-proxy
+          (process/spawn fetch-proxy-cmd))
+
+        (def scp-cmd @["scp"
+                       "-oBatchMode=yes"
+                       "-q"
+                       pkg-path
+                       (string build-host ":" rpkg-path)])
+        (eprintf "%j" scp-cmd)
+        (sh/$ scp-cmd)
+        
+        (def pkgstore-build-cmd
+          @["ssh"
+            "-oBatchMode=yes"
+            build-host
+            "--"
+            "hermes-pkgstore" "build"
+            "-j" parallelism
+            "-f" rfetch-socket-path
+            ;(if (= *store-path* "") [] ["-s" *store-path*])
+            "-p" rpkg-path
+            "-o" rroot
+            ])
+
+        (eprintf "%j" pkgstore-build-cmd)
+        
+        (def result-path-buf @"")
+        (def build-exit-code
+          (process/run pkgstore-build-cmd :redirects [[stdout result-path-buf]]))
+
+        (unless (zero? build-exit-code)
+          (os/exit build-exit-code))
+
+        (def cp-target-args
+          (if (parsed-args "no-out-link")
+            []
+            (if-let [output (parsed-args "output")]
+              [output]
+              ["./result"])))
+
+        (:close fetch-proxy)
+        # XXX add ttl to cp
+        (def cp-cmd
+          @["hermes" "cp" (string "ssh://" build-host rroot) ;cp-target-args])
+        (eprintf "%j" cp-cmd)
+        (def cp-exit-status
+          (process/run cp-cmd))
+        (:close rtmpdir)
+        (when (zero? cp-exit-status)
+          (print (string result-path-buf)))
+        cp-exit-status)
+      (do
+
+        (def pkgstore-build-cmd
+          @["hermes-pkgstore" "build"
+            "-j" parallelism
+            "-f" fetch-socket-path
+            "-s" *store-path*
+            "-p" pkg-path
+            ;(if (parsed-args "no-out-link") ["-n"] [])
+            ;(if-let [ttl (parsed-args "ttl")] ["--ttl" ttl] [])
+            ;(if-let [output (parsed-args "output")] ["--output" output] [])])
+
+        (def build-exit-code
+          (process/run pkgstore-build-cmd))
+        
+        build-exit-code)))
+
+  (:close tmpdir)
+  (os/exit exit-status))
 
 (def- gc-params
   ["Run the package garbage collector."
@@ -321,30 +295,47 @@
   (unless parsed-args
     (os/exit 1))
   
-  (unless (= 2 (length (parsed-args :default)))
+  (def nargs (length (parsed-args :default)))
+  (unless (or (= 1 nargs)
+              (= 2 nargs))
     (error "expected a 'from' and 'to' argument"))
 
   (def [from to] (parsed-args :default))
 
-  # TODO pass in config.
   (def ssh-peg (peg/compile ~{
-    :main (* "ssh://" (capture (some (* (not "/") 1)))  (capture (any 1)))
+    :main (* "ssh://" (capture (some (* (not "/") 1)))  (choice (capture (some 1)) (constant nil)))
   }))
 
   (def from-cmd
     (if-let [[host from] (peg/match ssh-peg from)]
-      @["ssh" "-C" host "hermes-pkgstore" "send" "-p" from]
+      @["ssh"
+        "-oBatchMode=yes"
+        "-C"
+        host
+        "--" "hermes-pkgstore" "send" "-p" from]
       @["hermes-pkgstore" "send" "-p" from]))
 
   (def to-cmd
     (do
-      (def store-args
+      (def store-path
         (if-let [to-store (parsed-args "to-store")]
-          @["-s" to-store] 
-          @[]))
-      (if-let [[host to] (peg/match ssh-peg to)]
-        @["ssh" "-C" host "--" "hermes-pkgstore" "recv" ;store-args ;(if to ["-o"  to] [])]
-        @["hermes-pkgstore" "recv" ;store-args "-o" to])))
+          to-store
+          *store-path*))
+      (def store-args
+        (if (= store-path"")
+          []
+          ["-s" store-path]))
+      (if-let [_ to
+               [host to] (peg/match ssh-peg to)]
+        @["ssh"
+          "-oBatchMode=yes"
+          "-C"
+          host
+          "--"
+          "hermes-pkgstore" "recv"
+          ;store-args
+          ;(if to ["-o"  to] [])]
+        @["hermes-pkgstore" "recv" ;store-args ;(if to ["-o"  to] [])])))
 
   (def [pipe1< pipe1>] (process/pipe))
   (def [pipe2< pipe2>] (process/pipe))

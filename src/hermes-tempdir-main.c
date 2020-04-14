@@ -60,6 +60,7 @@ static void sighandler(int signo) {
 
 int main()
 {
+    umask(0077);
     signal(SIGINT,sighandler);
     signal(SIGHUP,sighandler);
     signal(SIGQUIT,sighandler);
@@ -74,6 +75,8 @@ int main()
     }
     if (printf("%s\n", dir_name) < 0)
         exit(1);
+    if (fflush(stdout) != 0)
+        exit(1);
     char buf[1];
     while (!interrupted) {
         // alarm ensures cleanup happens
@@ -83,6 +86,8 @@ int main()
         alarm(5);
         errno = 0;
         int rc = read(STDIN_FILENO, buf, 1);
+        if (rc == 1)
+            break;
         if (rc != 1 && errno != EINTR)
             break;
     }

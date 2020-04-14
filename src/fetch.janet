@@ -113,7 +113,7 @@
 
 (defn fetch*
   [hash dest]
-  (with [destf (file/open dest :wb)]
+  (with [destf (or (file/open dest :wb) (error (string "unable to open " dest)))]
   (with [c (_hermes/unix-connect (dyn :fetch-socket))]
     (protocol/send-msg c [:fetch-content hash])
     (while true

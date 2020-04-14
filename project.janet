@@ -33,13 +33,18 @@
            "src/unpack.c"]
   :lflags ["-larchive"])
 
+(rule "build/hermes-tempdir" ["src/hermes-tempdir-main.c"]
+  (shell "gcc" "src/hermes-tempdir-main.c" "-o" "build/hermes-tempdir"))
+
 (declare-executable
   :name "hermes"
-  :entry "src/hermes-main.janet")
+  :entry "src/hermes-main.janet"
+  :deps ["build/hermes-tempdir"])
 
 (declare-executable
   :name "hermes-pkgstore"
-  :entry "src/hermes-pkgstore-main.janet")
+  :entry "src/hermes-pkgstore-main.janet"
+  :deps ["build/hermes-tempdir"])
 
 (declare-executable
   :name "hermes-builder"

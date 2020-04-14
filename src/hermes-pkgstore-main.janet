@@ -1,7 +1,7 @@
 (import argparse)
 (import path)
 (import ./pkgstore)
-(import ./builder)
+(import ./builtins)
 (import ../build/_hermes)
 
 (defn die [& args]
@@ -91,7 +91,7 @@
 
   (pkgstore/open-pkg-store store)
 
-  (def pkg (unmarshal (slurp (parsed-args "package")) builder/builder-load-registry))
+  (def pkg (unmarshal (slurp (parsed-args "package")) builtins/load-registry))
 
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "pkg did did not return a valid package, got %v" pkg)))
@@ -99,15 +99,37 @@
   (def parallelism (or (scan-number (parsed-args "parallelism"))
                        (error "expected a number for --parallelism")))
 
-
   (def ttl
     (when (parsed-args "ttl")
       (or (scan-number (parsed-args "ttl"))
           (error "expected a number of seconds for --ttl"))))
 
+  (def fetch-socket-path (parsed-args "fetch-socket-path"))
+  ((fn configure-fetch-socket
+    [&opt nleft]
+    (default nleft 5)
+    (when (> 0 nleft)
+      (error (string "fetch-socket " fetch-socket-path "never appeared")))
+    (if (os/stat fetch-socket-path)
+      (do
+        # We must make the fetch socket
+        # readable by any user so that build users
+        # can connect.
+        # protected by being in a private directory.
+        # We should investigate other ways to do
+        # this if possible.
+        (os/chmod fetch-socket-path 8r777)
+        nil)
+      (do
+        # If the socket is coming via ssh, its not easy to
+        # tell when it will be ready. We can wait for it to simplify.
+        (def wait-for 0.2)
+        (os/sleep wait-for)
+        (configure-fetch-socket (- nleft wait-for))))))
+
   (pkgstore/build
     :pkg pkg
-    :fetch-socket-path (parsed-args "fetch-socket-path")
+    :fetch-socket-path fetch-socket-path
     :gc-root (unless (parsed-args "no-out-link") (parsed-args "output"))
     :parallelism parallelism
     :ttl ttl)

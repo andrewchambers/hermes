@@ -3,14 +3,16 @@
 (import path)
 (import flock)
 (import jdn)
+(import ./tempdir)
 (import ./hash)
 (import ./protocol)
-(import ./builder)
+(import ./builtins)
 (import ../build/_hermes :as _hermes)
 
 (var- *store-path* nil)
 (var- *store-config* nil)
 (var- *store-owner-uid* nil)
+(var- *store-owner-gid* nil)
 
 (defn open-pkg-store
   [store-path]
@@ -21,6 +23,7 @@
                         (if (= abs "/") "" abs))))
   
   (def uid (_hermes/getuid))
+  (def gid (_hermes/getgid))
   (def euid (_hermes/geteuid))
   (def egid (_hermes/getegid))
   
@@ -40,19 +43,22 @@
  
   (set *store-config* (jdn/decode (slurp cfg-path)))
   (set *store-owner-uid* (cfg-stat :uid))
+  (set *store-owner-gid* (cfg-stat :gid))
 
   (case (*store-config* :mode)
     :single-user
       (do
         (when (empty? *store-path*)
           (error "single-user stores cannot be rooted at /"))
-        (unless (= (cfg-stat :uid) uid)
-          (error "package store is not owned by current user")))
+        (unless (= *store-owner-uid* uid)
+          (error "package store is not owned by current user"))
+        (unless (= *store-owner-gid* gid)
+          (error "package store group differs from current user")))
     :multi-user
       (do
         (unless (empty? *store-path*)
           (error "multi-user stores can only be rooted at /"))
-        (unless (cfg-stat :uid)
+        (unless (and (= *store-owner-uid* 0) (= *store-owner-gid* 0))
           (error "multi-user store must be root owned"))
         (unless (= euid 0)
           (error "euid must be root when opening a multi-user store"))
@@ -422,19 +428,21 @@
    }]
   (assert *store-config*)
 
+  (def builder-bin (find-builder-bin))
+
   (def store-mode (*store-config* :mode))
 
   (def dep-info (compute-build-dep-info pkg))
 
   # Copy registry so we can update it as we build packages.
-  (def registry (merge-into @{} builder/builder-registry))
+  (def registry (merge-into @{} builtins/registry))
   
   (each p (dep-info :order)
     (put registry (p :builder) '*pkg-noop-build*))
 
   (each p (dep-info :order)
     # Freeze the packages in order as children must be frozen first.
-    (_hermes/pkg-freeze *store-path* builder/builder-registry p))
+    (_hermes/pkg-freeze *store-path* builtins/registry p))
 
   (with [gc-flock (acquire-gc-lock :block :shared)]
   (with [build-user (acquire-build-user)]
@@ -469,7 +477,7 @@
           (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
           (sh/$ ["rm" "-rf" (pkg :path)]))
         
-        (sh/$ ["mkdir" (pkg :path)])
+        (os/mkdir (pkg :path))
 
         (when (= store-mode :single-user)
           # We set the permissions to 777
@@ -481,21 +489,18 @@
           # a kludge that could be fixed.
           (os/chmod (pkg :path) 8r777))
 
-        (def tmpdir (sh/$$_ ["mktemp" "-d"]))
-        (defer (do
-                 (sh/$ ["chmod" "-R" "u+w" tmpdir])
-                 (sh/$ ["rm" "-r" tmpdir]))
+        (with [tmpdir (tempdir/tempdir)]
           
-          (def bin (string tmpdir "/bin"))
-          (def usr-bin (string tmpdir "/usr/bin"))
-          (def tmp (string tmpdir "/tmp"))
-          (def build (string tmpdir "/tmp/build"))
+          (def bin (string (tmpdir :path) "/bin"))
+          (def usr-bin (string (tmpdir :path) "/usr/bin"))
+          (def tmp (string (tmpdir :path) "/tmp"))
+          (def build (string (tmpdir :path) "/tmp/build"))
 
           (sh/$ ["mkdir" "-p" build bin usr-bin])
 
           (when (= store-mode :multi-user)
             # Paths that need to be owned by the build user.
-            (each d [bin build usr-bin tmp]
+            (each d [(pkg :path) bin build usr-bin tmp]
               (_hermes/chown d (build-user :uid) (build-user :gid))))
 
           (def do-build 
@@ -512,7 +517,7 @@
                     ((pkg :builder)))))
               (make-builder pkg parallelism)))
 
-          (def thunk-path (string tmpdir "/tmp/.pkg.thunk"))
+          (def thunk-path (string (tmpdir :path) "/tmp/.pkg.thunk"))
           (put registry (pkg :builder) nil)
           (spit thunk-path (marshal do-build registry))
           (put registry (pkg :builder) '*pkg-noop-build*)
@@ -535,17 +540,15 @@
             "--bindmount" (string bin ":/bin")
             "--bindmount" (string tmp ":/tmp")
             ;(if (pkg :content) ["--bindmount" (string fetch-socket-path ":/tmp/fetch.sock")] [])
-            "--bindmount" (let [hpkg-path (string *store-path* "/hpkg")]
-                            (string hpkg-path ":" hpkg-path))
+            "--bindmount" (string (pkg :path) ":" (pkg :path))
             "--user" (string (build-user :uid))
             "--group" (string (build-user :gid))
-            "--" (find-builder-bin) "-t" "/tmp/.pkg.thunk"]))
+            "--" builder-bin "-t" "/tmp/.pkg.thunk"]))
 
         (def scanned-refs (ref-scan db pkg))
 
         # Ensure files have correct owner, clear any permissions except execute.
-        # Also ensure the hardlink count is 1.
-        (_hermes/storify (pkg :path) (build-user :uid) (build-user :gid))
+        (_hermes/storify (pkg :path) *store-owner-uid* *store-owner-gid*)
 
         (when-let [content (pkg :content)]
           (assert-pkg-content (pkg :path) content))
@@ -557,7 +560,8 @@
 
         (os/chmod (pkg :path) 8r755)
 
-        (spit (string (pkg :path) "/.hpkg.jdn") (string/format "%j" {
+        (def info-path (string (pkg :path) "/.hpkg.jdn"))
+        (spit info-path  (string/format "%j" {
           :name (pkg :name)
           :hash (pkg :hash)
           :force-refs (pkg-refset-to-dirnames pkg :force-refs)
@@ -566,6 +570,8 @@
           :scanned-refs scanned-refs
           :content (pkg :content)
         }))
+
+        (_hermes/storify info-path *store-owner-uid* *store-owner-gid*)
 
         (os/chmod (pkg :path) 8r555)
         (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"

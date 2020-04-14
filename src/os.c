@@ -17,18 +17,26 @@
 #include "hermes.h"
 
 static void passwd_into_table(struct passwd *pw, JanetTable *t) {
-    janet_table_put(t, janet_ckeywordv("name"), janet_cstringv(pw->pw_name));
     janet_table_put(t, janet_ckeywordv("uid"), janet_wrap_number(pw->pw_uid));
     janet_table_put(t, janet_ckeywordv("gid"), janet_wrap_number(pw->pw_gid));
-    janet_table_put(t, janet_ckeywordv("gecos"), janet_cstringv(pw->pw_gecos));
-    janet_table_put(t, janet_ckeywordv("dir"), janet_cstringv(pw->pw_dir));
-    janet_table_put(t, janet_ckeywordv("shell"), janet_cstringv(pw->pw_shell));
+    if (pw->pw_name)
+        janet_table_put(t, janet_ckeywordv("name"), janet_cstringv(pw->pw_name));
+    if (pw->pw_gecos)
+        janet_table_put(t, janet_ckeywordv("gecos"), janet_cstringv(pw->pw_gecos));
+    if (pw->pw_dir)
+        janet_table_put(t, janet_ckeywordv("dir"), janet_cstringv(pw->pw_dir));
+    if (pw->pw_shell)
+        janet_table_put(t, janet_ckeywordv("shell"), janet_cstringv(pw->pw_shell));
 }
 
 Janet jgetpwnam(int argc, Janet *argv) {
     JanetTable *info;
     janet_arity(argc, 1, 2);
-    struct passwd *pw = getpwnam((const char*)janet_getstring(argv, 0));
+    const char *name = (const char*)janet_getstring(argv, 0);
+    struct passwd *pw = getpwnam(name);
+    if (!pw) {
+        janet_panicf("no user named %s", name);
+    }
     if (argc >= 2) {
         info = janet_gettable(argv, 1);
     } else {
@@ -41,7 +49,11 @@ Janet jgetpwnam(int argc, Janet *argv) {
 Janet jgetpwuid(int argc, Janet *argv) {
     JanetTable *info;
     janet_arity(argc, 1, 2);
-    struct passwd *pw = getpwuid(janet_getinteger(argv, 0));
+    uid_t uid = janet_getinteger(argv, 0);
+    struct passwd *pw = getpwuid(uid);
+    if (!pw) {
+        janet_panicf("no user with uid %s", uid);
+    }
     if (argc >= 2) {
         info = janet_gettable(argv, 1);
     } else {
