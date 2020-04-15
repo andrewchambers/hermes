@@ -12,6 +12,7 @@
     "https://github.com/andrewchambers/janet-flock.git"
     "https://github.com/andrewchambers/janet-process.git"
     "https://github.com/andrewchambers/janet-sh.git"
+    "https://github.com/andrewchambers/janet-base16.git"
   ])
 
 (declare-native
