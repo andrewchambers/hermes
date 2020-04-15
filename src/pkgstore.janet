@@ -664,7 +664,7 @@
       (protocol/send-msg out [:challenge-response {:key-name key-name :sig (slurp sig-path)}]))
     (error "protocol error, expected :challenge-trust"))
 
-  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [flock (acquire-gc-lock :block :shared)]
   (with [db (open-db)]
     
     (def pkg-path (os/realpath pkg-root))
@@ -697,7 +697,7 @@
 (defn recv-pkg-closure
   [out in gc-root]
 
-  (def challenge (os/cryptorand 4096))
+  (def challenge (os/cryptorand 8192))
   (protocol/send-msg out [:challenge-trust challenge])
 
   (with [tempdir (tempdir/tempdir)]
@@ -727,7 +727,7 @@
           (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*")))
       (error "protocol error, expected :challenge-response")))
 
-  (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
+  (with [flock (acquire-gc-lock :block :shared)]
   (with [db (open-db)]
     (def root-ref
       (match (protocol/recv-msg in)
