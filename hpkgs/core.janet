@@ -19,7 +19,9 @@
     :name name
     :builder
     (fn []
-      (os/symlink (string (seed-env :path) "/bin/dash") "/bin/sh")
+      # This already exists in single user mode.
+      (unless (os/lstat "/bin/sh")
+        (os/symlink (string (seed-env :path) "/bin/dash") "/bin/sh"))
       (os/setenv "PATH" (string (seed-env :path) "/bin"))
       (def src-archive (first (sh/glob (string (src :path) "/*"))))
       (unpack src-archive)
@@ -171,7 +173,7 @@
         (def pkg-bin-dir (string (pkg :path) "/bin"))
         (each bin (os/dir pkg-bin-dir)
           (def from
-            (string (sh/$$_ ["readlink" "-f" (string pkg-bin-dir "/" bin)])))
+            (string (os/realpath (string pkg-bin-dir "/" bin))))
           (def to (string (dyn :pkg-out) "/bin/" bin))
           (unless (os/stat to)
             (os/symlink from to))))
@@ -426,7 +428,8 @@
     :name name
     :builder
     (fn std-builder []
-      (os/symlink (string (dash :path) "/bin/dash") "/bin/sh")
+      (unless (os/lstat "/bin/sh")
+        (os/symlink (string (dash :path) "/bin/dash") "/bin/sh"))
       (def all-bin-inputs (array/concat @[] bin-inputs [core-build-env]))
       (os/setenv "PATH"
         (string/join (map |(string ($ :path) "/bin") all-bin-inputs) ":"))

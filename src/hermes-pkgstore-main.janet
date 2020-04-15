@@ -12,8 +12,10 @@
   []
   (def uid (_hermes/getuid))
   (def gid (_hermes/getgid))
-  (_hermes/seteuid uid)
-  (_hermes/setegid gid))
+  (_hermes/setegid gid)
+  (_hermes/setgid gid)
+  (_hermes/setuid uid)
+  (_hermes/seteuid uid))
 
 (defn- unknown-command
   []

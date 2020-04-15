@@ -62,7 +62,7 @@ Janet storify(int argc, Janet *argv) {
             if (lchown(fent->fts_accpath, uid, gid) != 0)
                 janet_panicf("unable to storify %s - lchown - %s", fent->fts_accpath, strerror(errno));
 
-            if (fent->fts_info != FTS_SL) {
+            if (fent->fts_info != FTS_SL && fent->fts_info != FTS_SLNONE) {
                 if (utime(fent->fts_accpath, &t) != 0)
                     janet_panicf("unable to storify %s - utime - %s", fent->fts_accpath, strerror(errno));
                 if (chmod(fent->fts_accpath, (fent->fts_statp->st_mode&0111)|0444) != 0)

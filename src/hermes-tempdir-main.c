@@ -33,9 +33,11 @@ void cleanup(const char *dir)
         case FTS_DP:
             TRY(rmdir(curr->fts_accpath));
             break;
-        case FTS_F:
         case FTS_SL:
         case FTS_SLNONE:
+            TRY(unlink(curr->fts_accpath));
+            break;
+        case FTS_F:
         case FTS_DEFAULT:
             TRY(chmod(curr->fts_accpath, 0700));
             TRY(unlink(curr->fts_accpath));

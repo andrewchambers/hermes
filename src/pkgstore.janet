@@ -3,6 +3,7 @@
 (import path)
 (import flock)
 (import jdn)
+(import base16)
 (import ./tempdir)
 (import ./hash)
 (import ./protocol)
@@ -90,11 +91,27 @@
       (ensure-dir-exists path))
     (ensure-dir-exists (string path "/etc"))
     (ensure-dir-exists (string path "/etc/hermes"))
+    (ensure-dir-exists (string path "/etc/hermes/trusted-pub-keys"))
     (ensure-dir-exists (string path "/var"))
     (ensure-dir-exists (string path "/var/hermes"))
     (ensure-dir-exists (string path "/var/hermes/lock"))
     (ensure-dir-exists (string path "/hpkg"))
     (os/chmod (string path "/hpkg") 8r755)
+
+    (unless (os/lstat (string path "/etc/hermes/signing-key.sec"))
+      (def store-id (base16/encode (os/cryptorand 16)))
+      (def secret-key-path (string path "/etc/hermes/signing-key-" store-id ".sec"))
+      (def public-key-path (string path "/etc/hermes/signing-key-" store-id ".pub"))
+      (sh/$ ['signify '-G '-n
+               '-c "Hermes package store key" 
+               "-s" secret-key-path
+               '-p  public-key-path])
+      (os/symlink 
+         (string "./signing-key-" store-id ".sec")
+         (string path "/etc/hermes/signing-key.sec"))
+      (os/symlink 
+         (string "./signing-key-" store-id ".pub")
+         (string path "/etc/hermes/signing-key.pub")))
 
     (spit (string path "/var/hermes/lock/gc.lock") "")
 
@@ -410,6 +427,7 @@
 
 (defn add-root
   [db pkg-path root]
+  (def root (path/abspath root))
   (with [old-euid (_hermes/geteuid) _hermes/seteuid]
     (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
     (def tmplink (string root ".hermes-root"))
@@ -479,76 +497,110 @@
         
         (os/mkdir (pkg :path))
 
-        (when (= store-mode :single-user)
-          # We set the permissions to 777
-          # during a single user build to ensure the 
-          # sandbox user can actually write to it. 
-          # When initializing the store we mark it's
-          # root directory as 700 so this should
-          # be secure, however it also seems like 
-          # a kludge that could be fixed.
-          (os/chmod (pkg :path) 8r777))
-
         (with [tmpdir (tempdir/tempdir)]
-          
-          (def bin (string (tmpdir :path) "/bin"))
-          (def usr-bin (string (tmpdir :path) "/usr/bin"))
-          (def tmp (string (tmpdir :path) "/tmp"))
-          (def build (string (tmpdir :path) "/tmp/build"))
 
-          (sh/$ ["mkdir" "-p" build bin usr-bin])
-
-          (when (= store-mode :multi-user)
-            # Paths that need to be owned by the build user.
-            (each d [(pkg :path) bin build usr-bin tmp]
-              (_hermes/chown d (build-user :uid) (build-user :gid))))
-
-          (def do-build 
-            # This awkward wrapper is related to the janet
-            # internals, we want a detached env with as few
-            # slots referenced as possible.
+          (def thunk-path (string (tmpdir :path) "/pkg.thunk"))
+          (defn spit-do-build-thunk
+            [do-build]
+            (put registry (pkg :builder) nil)
+            (spit thunk-path (marshal do-build registry))
+            (put registry (pkg :builder) '*pkg-noop-build*))
+        
+          (if (= :single-user)
             (do
-              (defn make-builder [pkg parallelism]
-                (fn do-build []
-                  (os/cd "/tmp/build")
-                  (with-dyns [:pkg-out (pkg :path)
-                              :parallelism parallelism
-                              :fetch-socket "/tmp/fetch.sock"]
-                    ((pkg :builder)))))
-              (make-builder pkg parallelism)))
+              (def build-dir (string (tmpdir :path) "/build"))
+              (os/mkdir build-dir)
+              # No sandbox at all for single user mode.
+              # It's faster, easier to test, more lightweight.
+              (def do-build 
+                # wrapper to minimize closure over capturing.
+                (do
+                  (defn make-builder [pkg build-dir fetch-socket-path parallelism]
+                    (fn do-build []
+                      (os/cd build-dir)
+                      (eachk k (os/environ)
+                        (os/setenv k nil))
+                      (with-dyns [:pkg-out (pkg :path)
+                                  :parallelism parallelism
+                                  :fetch-socket fetch-socket-path]
+                        ((pkg :builder)))))
+                  (make-builder pkg build-dir fetch-socket-path parallelism)))
+              (spit-do-build-thunk do-build)
+              (sh/$ [ builder-bin "-t" thunk-path]))
+            (do
+              # chrooted sandbox build for multi user store.
+              (def hpkg (string *store-path* "/hpkg"))
+              (def chroot (string (tmpdir :path) "/chroot"))
+              (def chroot-hpkg (string chroot hpkg))
+              (def chroot-tmp (string chroot "/tmp"))
+              (def chroot-fetch-socket (string chroot "/tmp/fetch.sock"))
+              (def chroot-usr (string chroot "/usr/"))
+              (def chroot-usr-bin (string chroot "/usr/bin"))
+              (def chroot-bin (string chroot "/bin"))
+              (def chroot-etc (string chroot "/etc"))
+              (def chroot-var (string chroot "/var"))
+              (def chroot-proc (string chroot "/proc"))
+              (def chroot-dev (string chroot "/dev"))
+              (def chroot-build (string chroot "/build"))
+              (def chroot-paths [
+                chroot chroot-hpkg chroot-usr chroot-usr-bin chroot-bin
+                chroot-etc chroot-var chroot-build chroot-tmp chroot-proc
+                chroot-dev
+              ])
 
-          (def thunk-path (string (tmpdir :path) "/tmp/.pkg.thunk"))
-          (put registry (pkg :builder) nil)
-          (spit thunk-path (marshal do-build registry))
-          (put registry (pkg :builder) '*pkg-noop-build*)
+              (sh/$ ["mkdir" "-p" ;chroot-paths])
+              (spit chroot-fetch-socket "")
+              (spit (string chroot "/etc/passwd")
+                (string 
+                   "root:x:0:0:root:/:/bin/sh\n"
+                   "builder:x:" (build-user :uid) ":" (build-user :gid) ":builder:/build:/bin/sh\n"))
+              (spit (string chroot "/etc/group")
+                (string  "builder:x:" (build-user :gid) ":"))
 
-          (sh/$ [
-            "nsjail"
-            "-M" "o"
-            "-q"
-            "--chroot" "/" # XXX We should make a proper chroot?.
-            "--rlimit_as" "max"
-            "--rlimit_cpu" "max"
-            "--rlimit_fsize" "max"
-            "--rlimit_nofile" "max"
-            "--rlimit_nproc" "max"
-            "--rlimit_stack" "max"
-            # In multi user mode we don't use user namespaces.
-            # Instead we isolate via locked build users.
-            ;(if (= store-mode :multi-user) ["--disable_clone_newuser"] [])
-            ;(if (pkg :content) ["--disable_clone_newnet"] [])
-            "--bindmount" (string bin ":/bin")
-            "--bindmount" (string tmp ":/tmp")
-            ;(if (pkg :content) ["--bindmount" (string fetch-socket-path ":/tmp/fetch.sock")] [])
-            "--bindmount" (string (pkg :path) ":" (pkg :path))
-            "--user" (string (build-user :uid))
-            "--group" (string (build-user :gid))
-            "--" builder-bin "-t" "/tmp/.pkg.thunk"]))
+              # Paths that need to be owned by the build user for various reasons.
+              (each d [(pkg :path) chroot-bin chroot-usr-bin chroot-build chroot-tmp]
+                (_hermes/chown d (build-user :uid) (build-user :gid)))
 
-        (def scanned-refs (ref-scan db pkg))
+              (def do-build 
+                # wrapper to minimize closure over capturing.
+                (do
+                  (defn make-builder [chroot hpkg pkg parallelism build-uid build-gid]
+                    (fn do-build []
+                      (_hermes/setuid 0)
+                      (_hermes/setgid 0)
+                      (_hermes/cleargroups)
+                      (sh/$ ["mount" "-t" "proc" "none" (string chroot "/proc")])
+                      (sh/$ ["mount" "--bind" "/dev" (string chroot "/dev")])
+                      (sh/$ ["mount" "--read-only" "--bind" hpkg (string chroot hpkg)])
+                      (sh/$ ["mount" "--bind" (pkg :path) (string chroot (pkg :path))])
+                      (sh/$ ["mount" "--bind" fetch-socket-path (string chroot "/tmp/fetch.sock")])
+                      (_hermes/chroot chroot)
+                      (_hermes/setegid build-gid)
+                      (_hermes/setgid build-gid)
+                      (_hermes/setuid build-uid)
+                      (_hermes/seteuid build-uid)
+                      (os/cd "/build")
+                      (with-dyns [:pkg-out (pkg :path)
+                                  :parallelism parallelism
+                                  :fetch-socket "/tmp/fetch.sock"]
+                        ((pkg :builder)))))
+                  (make-builder chroot hpkg pkg parallelism (build-user :uid) (build-user :gid))))
+
+              (spit-do-build-thunk do-build)
+              (sh/$ [
+                "unshare" "--fork" "-m" "-u" "-p" 
+                 ;(if (pkg :content)
+                   [] # network allowed if content specified.
+                   ["-n"])
+                "--" 
+                "tini"
+                "--"
+                builder-bin "-t" thunk-path]))))
 
         # Ensure files have correct owner, clear any permissions except execute.
         (_hermes/storify (pkg :path) *store-owner-uid* *store-owner-gid*)
+
+        (def scanned-refs (ref-scan db pkg))
 
         (when-let [content (pkg :content)]
           (assert-pkg-content (pkg :path) content))
@@ -599,6 +651,19 @@
 (defn send-pkg-closure
   [out in pkg-root]
 
+  (match (protocol/recv-msg in)
+    [:challenge-trust challenge]
+    (with [tempdir (tempdir/tempdir)]
+      (def pub-key (os/realpath (string *store-path* "/etc/hermes/signing-key.pub")))
+      (def sec-key (os/realpath (string *store-path* "/etc/hermes/signing-key.sec")))
+      (def msg-path (string (tempdir :path) "/challenge"))
+      (def sig-path (string (tempdir :path) "/challenge.sig"))
+      (spit msg-path challenge)
+      (def key-name (path/basename pub-key))
+      (sh/$ ['signify '-q '-S '-s sec-key '-m msg-path '-x sig-path])
+      (protocol/send-msg out [:challenge-response {:key-name key-name :sig (slurp sig-path)}]))
+    (error "protocol error, expected :challenge-trust"))
+
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
   (with [db (open-db)]
     
@@ -632,8 +697,35 @@
 (defn recv-pkg-closure
   [out in gc-root]
 
-  (unless (= (_hermes/getuid) *store-owner-uid*)
-    (error "only the store owner has permission to receive packages"))
+  (def challenge (os/cryptorand 4096))
+  (protocol/send-msg out [:challenge-trust challenge])
+
+  (with [tempdir (tempdir/tempdir)]
+    (match (protocol/recv-msg in)
+      [:challenge-response {:key-name key-name :sig sig}]
+      (do
+        (when (string/find "/" key-name)
+          (error "key name cannot contain '/'"))
+        (def other-pub-key (string *store-path* "/etc/hermes/trusted-pub-keys/" key-name))
+        (def our-pub-key (string *store-path* "/etc/hermes/" key-name))
+        (def pub-key
+          (cond
+            (os/stat other-pub-key)
+              other-pub-key
+            (os/stat our-pub-key)
+              our-pub-key
+            (error (string "store does not trust key - " key-name))))
+
+        (def msg-path (string (tempdir :path) "/challenge"))
+        (def sig-path (string (tempdir :path) "/challenge.sig"))
+
+        (spit msg-path challenge)
+        (spit sig-path sig)
+
+        (unless (sh/$? ['signify '-V '-x sig-path '-m msg-path '-p pub-key]
+                  :redirects [[stdout :null] [stderr :null]])
+          (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*")))
+      (error "protocol error, expected :challenge-response")))
 
   (with [flock (flock/acquire (string *store-path* "/var/hermes/lock/gc.lock") :block :shared)]
   (with [db (open-db)]
@@ -657,7 +749,7 @@
                 (sh/$ ["chmod" "-R" "u+w" pkg-path])
                 (sh/$ ["rm" "-rf" pkg-path]))
               (protocol/recv-dir in pkg-path)
-              (os/chmod pkg-path 8r555)
+              (_hermes/storify pkg-path *store-owner-uid* *store-owner-gid*)
               (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
                 {:hash pkg-hash :name pkg-name}))
             (recv-pkgs))

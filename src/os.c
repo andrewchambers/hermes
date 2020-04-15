@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE 
 #include <janet.h>
 #include <alloca.h>
 #include <errno.h>
@@ -113,6 +113,15 @@ Janet jgetgroups(int argc, Janet *argv) {
     return janet_wrap_array(v);
 }
 
+Janet jcleargroups(int argc, Janet *argv) {
+    (void)argv;
+    janet_fixarity(argc, 0);
+    int ngroups = 0;
+    gid_t *groups = NULL;
+    if(setgroups(ngroups, groups) == -1)
+        janet_panicf("unable to clear groups - %s", strerror(errno));
+    return janet_wrap_nil();
+}
 
 Janet jgetuid(int argc, Janet *argv) {
     (void)argv;
@@ -145,6 +154,13 @@ Janet jsetuid(int argc, Janet *argv) {
     return janet_wrap_nil();
 }
 
+Janet jsetgid(int argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+    if (setgid(janet_getinteger(argv, 0)) != 0)
+        janet_panicf("unable to set group id - %s", strerror(errno));
+    return janet_wrap_nil();
+}
+
 Janet jseteuid(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
     if (seteuid(janet_getinteger(argv, 0)) != 0)
@@ -170,6 +186,13 @@ Janet jchown(int argc, Janet *argv) {
 Janet jexit(int argc, Janet *argv) {
     janet_fixarity(argc, 1);
     exit(janet_getinteger(argv, 0));
+}
+
+Janet jchroot(int argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+    if (chroot((const char*)janet_getstring(argv, 0)) != 0)
+        janet_panicf("unable to chroot - %s", strerror(errno));
+    return janet_wrap_nil();
 }
 
 static int listen_socket_gc(void *p, size_t len);
