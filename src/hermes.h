@@ -17,7 +17,7 @@ typedef struct {
     char frozen;  /* Once a package is frozen,
                      It's hash has been computed and
                      the path on disk has been computed.
-                    
+
                      A frozen package only marshals
                      values essential for running it's builder. */
 
@@ -102,6 +102,8 @@ Janet jgetgrnam(int argc, Janet *argv);
 Janet jcleargroups(int argc, Janet *argv);
 Janet jchown(int argc, Janet *argv);
 Janet jexit(int argc, Janet *argv);
-Janet jchroot(int argc, Janet *argv); 
+Janet jchroot(int argc, Janet *argv);
 Janet unix_listen(int argc, Janet *argv);
 Janet unix_connect(int argc, Janet *argv);
+Janet nuke_path(int argc, Janet *argv);
+Janet jmount(int argc, Janet *argv);

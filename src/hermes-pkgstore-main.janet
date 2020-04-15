@@ -205,7 +205,10 @@
     "output" 
      {:kind :option
       :short "o"
-      :help "Path to where package output link will be created."}])
+      :help "Path to where package output link will be created."}
+    "allow-untrusted" 
+     {:kind :flag
+      :help "Allow the receive end store owner to ignore failed trust challenges"}])
 
 (defn- recv
   []
@@ -220,7 +223,8 @@
     (drop-setuid+setgid-privs))
 
   (pkgstore/open-pkg-store store)
-  (pkgstore/recv-pkg-closure stdout stdin (parsed-args "output")))
+  (pkgstore/recv-pkg-closure
+    stdout stdin (parsed-args "output") :allow-untrusted (parsed-args "allow-untrusted")))
 
 (defn main
   [&]

@@ -1,6 +1,7 @@
 #include <janet.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 #include <errno.h>
 #include "hermes.h"
 
@@ -192,10 +193,27 @@ static const JanetReg cfuns[] = {
     {"cleargroups", jcleargroups, NULL},
     {"unix-listen", unix_listen, NULL},
     {"unix-connect", unix_connect, NULL},
+    {"nuke-path", nuke_path, NULL},
+    {"mount", jmount, NULL},
     {NULL, NULL, NULL}
 };
 
 JANET_MODULE_ENTRY(JanetTable *env) {
     janet_register_abstract_type(&pkg_type);
     janet_cfuns(env, "_hermes", cfuns);
+
+
+#define DEF_CONSTANT_INT(X) janet_def(env, #X, janet_wrap_integer(X), NULL)
+
+    //DEF_CONSTANT_INT(MS_DIRSYNC);
+    //DEF_CONSTANT_INT(MS_LAZYTIME);
+    //DEF_CONSTANT_INT(MS_NODIRATIME);
+    //DEF_CONSTANT_INT(MS_NOATIME);
+    //DEF_CONSTANT_INT(MS_NODEV);
+    //DEF_CONSTANT_INT(MS_NOEXEC);
+    //DEF_CONSTANT_INT(MS_NOSUID);
+    DEF_CONSTANT_INT(MS_RDONLY);
+    DEF_CONSTANT_INT(MS_BIND);
+
+#undef DEF_CONSTANT_INT
 }

@@ -1,4 +1,4 @@
-#define _DEFAULT_SOURCE 
+#define _DEFAULT_SOURCE
 #include <janet.h>
 #include <alloca.h>
 #include <errno.h>
@@ -11,8 +11,13 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 #include <unistd.h>
+#include <fts.h>
+
+
 
 #include "hermes.h"
 
@@ -331,3 +336,67 @@ Janet unix_connect(int argc, Janet *argv) {
 
     return janet_makefile(f, JANET_FILE_WRITE|JANET_FILE_READ|JANET_FILE_BINARY);
 }
+
+Janet nuke_path(int argc, Janet *argv)
+{
+    janet_fixarity(argc, 1);
+    const char * dir = (const char *)janet_getstring(argv, 0);
+    int ok = 1;
+    int err = 0;
+    FTS *ftsp = NULL;
+    FTSENT *curr;
+
+    char *files[] = { (char *) dir, NULL };
+    ftsp = fts_open(files, FTS_NOCHDIR | FTS_PHYSICAL | FTS_XDEV, NULL);
+    if (!ftsp) {
+        ok = 0;
+        err = errno;
+        goto finish;
+    }
+
+#define TRY(X) if(X != 0) { ok = 0; err = errno; goto finish; }
+    while ((curr = fts_read(ftsp))) {
+        switch (curr->fts_info) {
+        case FTS_NS:
+        case FTS_DNR:
+        case FTS_ERR:
+            break;
+        case FTS_D:
+            TRY(chmod(curr->fts_accpath, 0700));
+            break;
+        case FTS_DP:
+            TRY(rmdir(curr->fts_accpath));
+            break;
+        case FTS_SL:
+        case FTS_SLNONE:
+            TRY(unlink(curr->fts_accpath));
+            break;
+        case FTS_F:
+        case FTS_DEFAULT:
+            TRY(chmod(curr->fts_accpath, 0700));
+            TRY(unlink(curr->fts_accpath));
+            break;
+        }
+    }
+#undef TRY
+finish:
+    if (ftsp)
+        fts_close(ftsp);
+
+    if (!ok)
+        janet_panicf("unable to remove directory - %s", strerror(err));
+    return janet_wrap_nil();
+}
+
+Janet jmount(int argc, Janet *argv)
+{
+    janet_fixarity(argc, 4);
+    if(mount((const char*)janet_getstring(argv, 0),
+             (const char*)janet_getstring(argv, 1),
+             (const char*)janet_getstring(argv, 2),
+             janet_getnumber(argv, 3),
+             NULL) != 0)
+        janet_panicf("unable to perform mount - %s", strerror(errno));
+    return janet_wrap_nil();
+}
+

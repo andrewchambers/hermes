@@ -122,5 +122,6 @@
 (put hermes-env '_hermes/setegid @{:value _hermes/setegid})
 (put hermes-env '_hermes/cleargroups @{:value _hermes/cleargroups})
 (put hermes-env '_hermes/chroot @{:value _hermes/chroot})
+(put hermes-env '_hermes/mount @{:value _hermes/mount})
 (def load-registry (env-lookup hermes-env))
 (def registry (invert load-registry))

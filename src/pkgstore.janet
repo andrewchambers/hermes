@@ -310,8 +310,7 @@
         (when-let [[hash name] (path-to-pkg-parts pkg-dir)]
           (sqlite3/eval db "delete from Pkgs where Hash = :hash;" {:hash hash}))
         (eprintf "deleting %s" pkg-dir)
-        (sh/$ ["chmod" "-R" "u+w" pkg-dir])
-        (sh/$ ["rm" "-rf" pkg-dir])))
+        (_hermes/nuke-path pkg-dir)))
 
     (build-lock-cleanup)
 
@@ -492,8 +491,7 @@
         [pkg]
         (eprintf "building %s..." (pkg :path))
         (when (os/stat (pkg :path))
-          (sh/$ ["chmod" "-R" "u+w" (pkg :path)])
-          (sh/$ ["rm" "-rf" (pkg :path)]))
+          (_hermes/nuke-path (pkg :path)))
         
         (os/mkdir (pkg :path))
 
@@ -506,7 +504,7 @@
             (spit thunk-path (marshal do-build registry))
             (put registry (pkg :builder) '*pkg-noop-build*))
         
-          (if (= :single-user)
+          (if (= store-mode :single-user)
             (do
               (def build-dir (string (tmpdir :path) "/build"))
               (os/mkdir build-dir)
@@ -569,11 +567,11 @@
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
                       (_hermes/cleargroups)
-                      (sh/$ ["mount" "-t" "proc" "none" (string chroot "/proc")])
-                      (sh/$ ["mount" "--bind" "/dev" (string chroot "/dev")])
-                      (sh/$ ["mount" "--read-only" "--bind" hpkg (string chroot hpkg)])
-                      (sh/$ ["mount" "--bind" (pkg :path) (string chroot (pkg :path))])
-                      (sh/$ ["mount" "--bind" fetch-socket-path (string chroot "/tmp/fetch.sock")])
+                      (_hermes/mount "proc" (string chroot "/proc") "proc" 0)
+                      (_hermes/mount "/dev" (string chroot "/dev") "" _hermes/MS_BIND)
+                      (_hermes/mount hpkg (string chroot hpkg) "" (bor _hermes/MS_BIND _hermes/MS_RDONLY))
+                      (_hermes/mount (pkg :path) (string chroot (pkg :path)) "" _hermes/MS_BIND)
+                      (_hermes/mount fetch-socket-path (string chroot "/tmp/fetch.sock") "" _hermes/MS_BIND)
                       (_hermes/chroot chroot)
                       (_hermes/setegid build-gid)
                       (_hermes/setgid build-gid)
@@ -695,7 +693,11 @@
       (error "remote did not acknowledge send")))))
 
 (defn recv-pkg-closure
-  [out in gc-root]
+  [out in gc-root &keys {:allow-untrusted allow-untrusted}]
+
+  (when allow-untrusted
+    (unless (= (_hermes/getuid) *store-owner-uid*)
+      (error "only the store owner can allow untrusted recieve")))
 
   (def challenge (os/cryptorand 8192))
   (protocol/send-msg out [:challenge-trust challenge])
@@ -724,7 +726,8 @@
 
         (unless (sh/$? ['signify '-V '-x sig-path '-m msg-path '-p pub-key]
                   :redirects [[stdout :null] [stderr :null]])
-          (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*")))
+          (unless allow-untrusted
+            (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*"))))
       (error "protocol error, expected :challenge-response")))
 
   (with [flock (acquire-gc-lock :block :shared)]
@@ -746,8 +749,7 @@
             (with [build-lock (acquire-build-lock pkg-hash :block :exclusive)]
               (def pkg-path (string *store-path* "/hpkg/" ref))
               (when (os/stat pkg-path)
-                (sh/$ ["chmod" "-R" "u+w" pkg-path])
-                (sh/$ ["rm" "-rf" pkg-path]))
+                (_hermes/nuke-path pkg-path))
               (protocol/recv-dir in pkg-path)
               (_hermes/storify pkg-path *store-owner-uid* *store-owner-gid*)
               (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
