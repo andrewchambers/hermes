@@ -503,11 +503,19 @@
             (put registry (pkg :builder) nil)
             (spit thunk-path (marshal do-build registry))
             (put registry (pkg :builder) '*pkg-noop-build*))
-        
+          
+          # network allowed if content specified, nothing downloaded
+          # can alter the package outcome.
+          (def allow-network (truthy? (pkg :content)))
+
           (if (= store-mode :single-user)
             (do
               (def build-dir (string (tmpdir :path) "/build"))
               (os/mkdir build-dir)
+              (def fetch-socket-path
+                (if allow-network
+                  fetch-socket-path
+                  (string (tmpdir :path) "/bad.sock")))
               # No sandbox at all for single user mode.
               # It's faster, easier to test, more lightweight.
               (def do-build 
@@ -562,7 +570,7 @@
               (def do-build 
                 # wrapper to minimize closure over capturing.
                 (do
-                  (defn make-builder [chroot hpkg pkg parallelism build-uid build-gid]
+                  (defn make-builder [chroot hpkg pkg parallelism build-uid build-gid allow-network]
                     (fn do-build []
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
@@ -582,13 +590,13 @@
                                   :parallelism parallelism
                                   :fetch-socket "/tmp/fetch.sock"]
                         ((pkg :builder)))))
-                  (make-builder chroot hpkg pkg parallelism (build-user :uid) (build-user :gid))))
+                  (make-builder chroot hpkg pkg parallelism (build-user :uid) (build-user :gid) allow-network)))
 
               (spit-do-build-thunk do-build)
               (sh/$ [
                 "unshare" "--fork" "-m" "-u" "-p" 
-                 ;(if (pkg :content)
-                   [] # network allowed if content specified.
+                 ;(if allow-network
+                   []
                    ["-n"])
                 "--" 
                 "tini"
