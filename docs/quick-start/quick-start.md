@@ -144,7 +144,6 @@ Now ./result contains a more impressive package!
 
 ```
 $ tree ./result
-[nix-shell:~/src/hermes]$ tree ./result
 ./result
 ├── activate
 └── bin
