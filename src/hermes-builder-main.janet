@@ -11,7 +11,7 @@
 
 (defn main
   [&]
- (def parsed-args (argparse/argparse ;params))
+  (def parsed-args (argparse/argparse ;params))
   (unless parsed-args
     (os/exit 1))
   ((unmarshal (slurp (parsed-args "thunk")) builtins/load-registry)))
