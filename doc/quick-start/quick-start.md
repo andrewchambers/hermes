@@ -286,3 +286,7 @@ and has a package store at the same path.
 ```
 $ hermes cp ./my-package ssh://my-other-server/home/me/my-package
 ```
+
+## Uninstalling hermes
+
+[see here](../uninstalling-hermes.md).
