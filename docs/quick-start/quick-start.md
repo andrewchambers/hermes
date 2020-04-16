@@ -165,13 +165,13 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 ...
 ```
 
-## Transferring packages between computers
+## Regenerating the seed environment
 
-We can use ```hermes cp``` to transfer arbitrary packages between computers, provided hermes is installed, 
-and has a package store at the same path.
+It's pretty lame to have to trust the seed environment, luckily, rebuilding it yourself
+is simple.
 
 ```
-$ hermes cp ./my-package ssh://my-other-server/home/me/my-package
+$ hermes build -m ./hpkgs/core.janet -e seed-out
 ```
 
 ## Writing your own packages
@@ -182,12 +182,13 @@ TODO ...
 
 TODO ...
 
+## Transferring packages between computers
 
-## Regenerating the seed environment
-
-It's pretty lame to have to trust the seed environment, luckily, rebuilding it yourself
-is simple.
+We can use ```hermes cp``` to transfer arbitrary packages between computers, provided hermes is installed, 
+and has a package store at the same path.
 
 ```
-$ hermes build -m ./hpkgs/core.janet -e seed-out
+$ hermes cp ./my-package ssh://my-other-server/home/me/my-package
 ```
+
+
