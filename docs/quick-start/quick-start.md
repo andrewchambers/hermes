@@ -20,7 +20,7 @@ Once hermes and it's support programs are built, extract them to your PATH:
 
 ```
 $ cd /home/me/bin
-$ tar -xvzf $HERMES_DIR/build/hermes.tar.gz
+$ tar -xvzf $HERMES_SRC/build/hermes.tar.gz
 ```
 
 ## Installing reproducible precompiled hermes
