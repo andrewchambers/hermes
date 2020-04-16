@@ -67,7 +67,6 @@ Lets see what you have just created:
         └── lock
             └── gc.lock
 
-7 directories, 7 files
 ```
 
 What are these files?
@@ -96,9 +95,9 @@ Lock files used by hermes during package builds and other operations.
 
 ## Installing your first package
 
-Now that hermes is installed and initialized, we can start to build packages:
+Now that hermes is installed and initialized, we can start building/installing packages.
 
-First lets install the binary seed package:
+First lets install the binary seed package (the root dependency of all packages.):
 ```
 $ git clone https://github.com/andrewchambers/hpkgs
 $ hermes build --module ./hpkgs/core.janet --expression seed-env --output ./seed-env
@@ -124,6 +123,12 @@ $ ./seed-env/bin/ls ./seed-env/bin
  awk        dirname      locate     patch       stdbuf       who                            x86_64-linux-musl-strings
 ....
 ```
+
+### A note about funny package paths
+
+Hermes packages are installed into a path based on it's cryptographic hash. In practice this
+simply means we can install many variations of the same package and not have to worry about conflicts
+ever.
 
 ## Uninstalling packages
 
@@ -151,7 +156,8 @@ $ hermes build -m ./hpkgs/core.janet -e core-env
 /tmp/hermes-store/hpkg/c7e0d1a92cbd5492a5468c74a2b65bd16b3af14e-core-env
 ```
 
-Now ./result contains a more impressive package!
+Now ./result contains a more impressive package! This package contains references to other packages, 
+hermes automatically trackes these dependencies for you.
 
 ```
 $ tree ./result
