@@ -149,11 +149,6 @@
 (rule "build/hermes-dumb-init" ["third-party/dumb-init/stamp_installed"]
   (sh/$ ~[cp "third-party/install-root/bin/dumb-init" "build/hermes-dumb-init"]))
 
-(add-dep "build" "build/hermes-tempdir")
-(add-dep "build" "build/hermes-minitar")
-(add-dep "build" "build/hermes-signify")
-(add-dep "build" "build/hermes-unshare")
-(add-dep "build" "build/hermes-dumb-init")
 
 (declare-native
   :name "_hermes"
@@ -189,5 +184,21 @@
   :entry "src/hermes-builder-main.janet"
   :deps all-src)
 
-)
+(def output-bins
+  ["hermes"
+   "hermes-pkgstore"
+   "hermes-builder"
+   "hermes-tempdir"
+   "hermes-signify"
+   "hermes-unshare"
+   "hermes-dumb-init"])
 
+(rule "build/hermes.tar.gz" (map |(string "build/" $) output-bins)
+  (sh/$
+   ~[tar -C ./build -czf build/hermes.tar.gz --files-from=-]
+    :redirects [[stdin (string/join output-bins "\n")]]))
+
+(add-dep "build" "build/hermes.tar.gz")
+
+
+)
