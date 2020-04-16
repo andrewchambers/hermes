@@ -30,7 +30,7 @@ Hermes also provides some nifty features:
 
 ## What does using Hermes look like?
 
-Coming soon...
+See the [quickstart guide](./doc/quick-start/quick-start.md).
 
 ## Does Hermes replace my language package manager like npm,jpm,cargo,pip... ?
 
