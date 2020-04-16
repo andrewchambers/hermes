@@ -178,7 +178,7 @@ $ hermes build -m ./hpkgs/core.janet -e seed-out
 
 TODO ...
 
-## Multi user install of hermes
+## Multi user install
 
 TODO ...
 
