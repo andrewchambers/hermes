@@ -184,7 +184,7 @@ TODO ...
 
 ## Transferring packages between computers
 
-We can use ```hermes cp``` to transfer arbitrary packages between computers, provided hermes is installed, 
+We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
 and has a package store at the same path.
 
 ```
