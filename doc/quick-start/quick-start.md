@@ -179,6 +179,19 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 ...
 ```
 
+## Using your packages
+
+To use packages, you can add them your PATH. Some packages might require more involved
+setup, in these cases, as a convention, packages that are 'environments' provide an activate script.
+
+you can try this with the core-env you have built by running: 
+```
+$ ./core-env/bin/dash
+$ . ./core-env/activate
+$ echo $PATH
+/hpkg/f114d38c842f824b416d8ad8c64ba80cb07a95ef-core-env/bin
+```
+
 ## Regenerating the seed environment
 
 It's pretty sad to have to trust the seed environment, luckily, rebuilding it yourself is simple.
