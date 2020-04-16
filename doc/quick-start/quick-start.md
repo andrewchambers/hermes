@@ -206,15 +206,9 @@ TODO ...
 
 TODO ...
 
+## Configuring a cache server
 
-## Transferring packages between computers
-
-We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
-and has a package store at the same path.
-
-```
-$ hermes cp ./my-package ssh://my-other-server/home/me/my-package
-```
+TODO...
 
 ## Transparent remote builds
 
@@ -233,3 +227,12 @@ remote host, with the resulting package copied back locally.
 It is important to note that builds referring to 'local-file packages still work without
 change. The remote build transparently handles sending these files to the build host 
 when they are needed.
+
+## Transferring packages between computers
+
+We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
+and has a package store at the same path.
+
+```
+$ hermes cp ./my-package ssh://my-other-server/home/me/my-package
+```
