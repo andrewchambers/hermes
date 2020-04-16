@@ -79,7 +79,8 @@ config is relatively empty.
 
 ### /etc/hermes/signing-key...
 
-This is a signing key related to package exports and downloads.
+Signing keys are related to how hermes package stores trust eachother to provide
+secure packages across the network, we will cover them in a later section.
 
 ### /var/hermes/hermes.db
 
@@ -242,19 +243,17 @@ $ sudo cat /etc/hermes/cfg.jdn
 Ensure your user is in the authorized group, as hermes will refuse to allow users not 
 in this group to build packages.
 
-You will also need to create user accounts for the sandbox build users. When a package is built, hermes
-will perform the package build on your behalf inside a [chroot](https://en.wikipedia.org/wiki/Chroot)
-[secure sandbox](https://en.wikipedia.org/wiki/Sandbox_(computer_security)). During this build it uses one of
-the specified build user accounts to help with package build security.
+When a package is built, hermes will perform the package build on your behalf inside a [chroot](https://en.wikipedia.org/wiki/Chroot) and
+[sandbox](https://en.wikipedia.org/wiki/Sandbox_(computer_security)). 
 
-
-How to do so varies system by system, but for some this will be sufficient:
+You will also need to create user accounts for the sandbox build users,
+how to do so varies system by system, but for many users this will be sufficient:
 
 ```
 $ for i in `seq 0 9`
->do
->  sudo useradd --system --no-create-home --home /homeless hermes_build_user
->done
+do
+  sudo useradd --system --no-create-home --home /homeless hermes_build_user$i
+done
 ```
 
 ## Configuring a cache server
