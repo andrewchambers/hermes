@@ -187,7 +187,7 @@ $ hermes build -m ./hpkgs/core.janet -e seed -o seed
 $ hermes build -m ./hpkgs/core.janet -e seed-out -o seed-out
 ```
 
-You can verify your binary seed has the checksum hash as the binary seed you originally downloaded.
+You can verify your binary seed has the same hash as the binary seed you originally downloaded.
 
 ```
 $ sha256sum ./seed/seed.tar.gz ./seed-out/seed.tar.gz
