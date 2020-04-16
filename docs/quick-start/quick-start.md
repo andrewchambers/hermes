@@ -182,3 +182,12 @@ TODO ...
 
 TODO ...
 
+
+### Regenerating the seed environment
+
+It's pretty lame to have to trust the seed environment, luckily, rebuilding it yourself
+is simple.
+
+```
+$ hermes build -m ./hpkgs/core.janet -e seed-out
+```
