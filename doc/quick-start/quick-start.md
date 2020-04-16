@@ -15,7 +15,7 @@ you are interested in diving into using Hermes.
 
 Installing from source:
 
-- Ensure you have latest janet, pkg-config, curl, libarchive and libbsd installed.
+- Ensure you have latest janet from git, pkg-config, curl, libarchive and libbsd installed.
 
 ```
 $ git clone https://github.com/andrewchambers/hermes
@@ -211,7 +211,114 @@ When both hashes match, it means you have the ability to regenerate *all* of you
 
 ## Writing your own packages
 
-TODO ...
+Hermes packages are closely related to the [janet programming language](https://janet-lang.org).
+
+A package is simply a janet object with a builder function, here is perhaps the simplest package:
+
+```
+$ hermes build -e '(pkg :name "empty-package" :builder (fn [] nil))'
+/hpkg/63386eadb35d5aa88567bd851a32112bbc2228c6-empty-package
+$ ls ./result/
+$ cat ./result/.hpkg.jdn
+{:hash "63386eadb35d5aa88567bd851a32112bbc2228c6" :scanned-refs @[] :name "empty-package"}
+```
+
+
+First, lets create a package with a file in it:
+```
+$ echo "hello" > hello.txt
+$ hermes build -e '(local-file "./hello.txt")'
+/hpkg/7f13ae53be79a917a67a11a2bc069c0fbd042212-hello.txt
+$ cat ./result/hello.txt
+hello
+```
+
+The example used the builtin ```local-file``` function to create a package object, containing
+our desired content.
+
+Now, lets create a package with a file we have downloaded from the internet:
+
+```
+$ hermes build -e '
+(fetch
+    :url "https://raw.githubusercontent.com/andrewchambers/hermes/master/doc/quick-start/hello.c"
+    :hash "sha256:606789023f0e1da5a251fb56a82b3017900aa1125a6d51bddbe063a189691ae7")'
+/hpkg/933b4fe2786fb38cd1876de0aa0431e88afabcad-hello.c
+```
+
+This example used the builtin fetch function to fetch content. Hermes requires external content to specifiy file hashes to ensure
+builds are reproducible.
+
+Now lets create more interesting packages:
+
+The following packages will quite ugly, but later we will see better functions for creating packages more easily.
+
+```
+$ hermes build -e '
+(pkg
+  :name "hello-package"
+  :builder
+  (fn []
+    (def output-file
+      (string (dyn :pkg-out) "/hello.txt"))
+    (spit output-file "hello world!")))
+'
+/hpkg/caab6bdf2b3e2bf38cdf11ee82dd7924b90a779f-hello-package
+$ cat ./result/hello.txt
+hello world!
+```
+
+Packages must write their output to a designated output path, ```(dyn :pkg-out)``` fetches this value from the janet dynamically scoped variable named
+by the janet keyword :pkg-out. The builder then writes this file using 'spit' function, to spit data to disk.
+
+
+Finally, let us put everything we tried together:
+
+Create hello.janet
+```
+(import ./hpkgs/core)
+
+(def hello-src
+  (fetch
+      :url "https://raw.githubusercontent.com/andrewchambers/hermes/master/doc/quick-start/hello.c"
+      :hash "sha256:606789023f0e1da5a251fb56a82b3017900aa1125a6d51bddbe063a189691ae7"))
+
+(def hello
+  (pkg
+    :name "hello"
+    :builder
+    (fn []
+      (os/setenv "PATH" (string (core/seed-env :path) "/bin"))
+      (def src (first (sh/glob (string (hello-src :path) "/*.c"))))
+      (def out (string (dyn :pkg-out) "/hello"))
+      (sh/$ ["x86_64-linux-musl-gcc" "-static" "-o" out  src]))))
+```
+
+Now we can build our package:
+
+```
+$ hermes build -m ./hello.janet -e hello
+/hpkg/76013284e6ec167a99bdd58b945175fefc00d5d2-hello
+$ ./result/hello
+hello world!
+```
+
+Note, the package is ugly! Luckily janet is a powerful programming language that lets us create abstractions.
+
+With a little effort, we can create more powerful ways to define packages, for example, the core definition of the tar package
+simply looks like:
+
+```
+(defcore tar
+  :src-url
+    "https://ftp.gnu.org/gnu/tar/tar-1.32.tar.gz"
+  :src-hash
+    "sha256:b59549594d91d84ee00c99cf2541a3330fed3a42c440503326dab767f2fbb96c")
+```
+
+How to define such package abstractions is beyond the scope of the quickstart, but just remember, you don't need to be a janet programmer to write
+packages, if someone else has defined suitable functions for you to use.
+
 
 ## Multi user install
 
