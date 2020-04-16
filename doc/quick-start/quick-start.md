@@ -156,7 +156,7 @@ $ hermes build -m ./hpkgs/core.janet -e core-env
 ```
 
 Now ./result contains a more impressive package! This package contains references to other packages, 
-hermes automatically trackes these dependencies for you.
+hermes automatically tracks these dependencies for you.
 
 ```
 $ tree ./result
@@ -183,12 +183,20 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 
 ## Regenerating the seed environment
 
-It's pretty lame to have to trust the seed environment, luckily, rebuilding it yourself
-is simple.
+It's pretty sad to have to trust the seed environment, luckily, rebuilding it yourself is simple.
 
 ```
-$ hermes build -m ./hpkgs/core.janet -e seed-out
+$ hermes build -m ./hpkgs/core.janet -e seed -o seed
+$ hermes build -m ./hpkgs/core.janet -e seed-out -o seed-out
 ```
+
+You can verify your binary seed has the checksum hash as the binary seed you originally downloaded.
+
+```
+$ sha256sum ./seed/seed.tar.gz ./seed-out/seed.tar.gz
+```
+
+When both hashes match, it means you have the ability to regenerate *all* of your hermes software from source. You have *total* control of your software stack :).
 
 ## Writing your own packages
 
