@@ -23,7 +23,7 @@ $ cd /home/me/bin
 $ tar -xvzf $HERMES_SRC/build/hermes.tar.gz
 ```
 
-## Installing a precompiled hermes
+## Installing precompiled Hermes
 
 Coming soon...
 
