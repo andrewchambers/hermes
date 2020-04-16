@@ -1,4 +1,15 @@
-# Hermes quick start for advanced users
+# Hermes quick start
+
+This quickstart is meant for confident users to quickly
+get started using Hermes to install software.
+
+Being familiar with the Janet programming language helps with writing packages,
+but it is not necessary to use packages. 
+
+People familiar with Nixos, or Guix may find some of the ideas familiar.
+
+All that being said, if you are a confident computer user, this guide may be useful if
+you are interested in diving into using Hermes.
 
 ## Installing Hermes
 
