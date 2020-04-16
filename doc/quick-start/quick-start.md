@@ -19,12 +19,9 @@ Installing from source:
 
 ```
 $ git clone https://github.com/andrewchambers/hermes
-...
 $ cd hermes
 $ jpm load-lockfile lockfile.jdn
-...
 $ jpm build
-...
 ```
 
 Once hermes and it's support programs are built, extract them to your PATH:
@@ -204,7 +201,52 @@ TODO ...
 
 ## Multi user install
 
-TODO ...
+Until now, you have been user a private package store that only your
+user can access. Hermes also supports a shared global package store.
+
+To use hermes in this mode requires slightly more configuration.
+
+First install hermes as root:
+
+```
+$ cd /usr/bin/
+$ sudo tar -xvzf $HERMES_SRC/build/hermes.tar.gz
+$ sudo chmod u+s,g+s hermes-pkgstore
+```
+Note, for a true multi-user install, we must install the pkgstore binary as setuid (The chmod command).
+This lets less privileged users install packages into /hpkg securely.
+
+
+Now we can initialize the global package store:
+
+```
+$ unset HERMES_STORE
+$ sudo hermes init
+```
+
+Now that hermes is initialized, globally, we can check our store config:
+
+```
+$ sudo cat /etc/hermes/cfg.jdn
+{
+  :mode :multi-user
+  :authorized-group "wheel"
+  :sandbox-build-users [
+    "hermes_build_user0"
+    ...
+  ]
+}
+```
+
+
+Ensure your user is in the authorized group, as hermes will refuse to allow users not 
+in this group to build packages.
+
+You will also need to create user accounts for the sandbox build users. When a package is built, hermes
+will perform the package build on your behalf inside a [chroot](https://en.wikipedia.org/wiki/Chroot)
+[secure sandbox](https://en.wikipedia.org/wiki/Sandbox_(computer_security)). During this build it uses one of
+the specified build user accounts to help with package build security.
+
 
 ## Configuring a cache server
 
