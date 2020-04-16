@@ -317,7 +317,7 @@ simply looks like:
 ```
 
 How to define such package abstractions is beyond the scope of the quickstart, but just remember, you don't need to be a janet programmer to write
-packages, if someone else has defined suitable functions for you to use.
+packages if someone else has defined suitable functions for you to use.
 
 
 ## Multi user install
