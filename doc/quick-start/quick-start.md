@@ -248,6 +248,15 @@ will perform the package build on your behalf inside a [chroot](https://en.wikip
 the specified build user accounts to help with package build security.
 
 
+How to do so varies system by system, but for some this will be sufficient:
+
+```
+$ for i in `seq 0 9`
+>do
+>  sudo useradd --system --no-create-home --home /homeless hermes_build_user
+>done
+```
+
 ## Configuring a cache server
 
 TODO...
