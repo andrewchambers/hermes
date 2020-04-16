@@ -198,6 +198,7 @@ TODO ...
 
 TODO ...
 
+
 ## Transferring packages between computers
 
 We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
@@ -207,4 +208,20 @@ and has a package store at the same path.
 $ hermes cp ./my-package ssh://my-other-server/home/me/my-package
 ```
 
+## Transparent remote builds
 
+When building a package on a laptop, or other underpowered device, it is
+useful to perform remote builds on a more powerful server. This can
+easily be done with hermes, simply add the --build-host flag to your
+build command.
+
+```
+$ hermes build -m ./hpkgs/core.janet -e seed-out --build-host ssh://your-server.com
+```
+
+The build will proceed exactly the same as a local build, but be performed on the
+remote host, with the resulting package copied back locally.
+
+It is important to note that builds referring to 'local-file packages still work without
+change. The remote build transparently handles sending these files to the build host 
+when they are needed.
