@@ -113,10 +113,11 @@
 
 (defn fetch*
   [hash dest]
-  (unless (os/stat (dyn :fetch-socket))
+  (def fetch-socket (dyn :fetch-socket))
+  (unless (and fetch-socket (os/stat fetch-socket))
     (error "fetch only possible in packages that specify :content"))
   (with [destf (or (file/open dest :wb) (error (string "unable to open " dest)))]
-  (with [c (_hermes/unix-connect )]
+  (with [c (_hermes/unix-connect fetch-socket)]
     (protocol/send-msg c [:fetch-content hash])
     (while true
       (match (protocol/recv-msg c)
