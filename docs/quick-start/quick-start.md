@@ -114,7 +114,7 @@ $ ./seed-env/bin/ls ./seed-env/bin
 ....
 ```
 
-### Uninstalling packages
+## Uninstalling packages
 
 In the previous section we installed a package, to remove packages, we must run the package garbage collector.
 
@@ -127,7 +127,7 @@ deleting /tmp/hermes-store/hpkg/39c4105a12581e50027a505f3321b0670d937c32-seed
 
 Packages that are not reachable by any links created by hermes will automatically be deleted.
 
-### Building a package from source
+## Building a package from source
 
 The previous package was quite boring, it just downloaded it from the internet... Hermes is supposed to be about building
 packages from source!
@@ -165,7 +165,7 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 ...
 ```
 
-### Transferring packages between computers
+## Transferring packages between computers
 
 We can use ```hermes cp``` to transfer arbitrary packages between computers, provided hermes is installed, 
 and has a package store at the same path.
@@ -174,16 +174,16 @@ and has a package store at the same path.
 $ hermes cp ./my-package ssh://my-other-server/home/me/my-package
 ```
 
-### Writing your own packages...
+## Writing your own packages
 
 TODO ...
 
-### Multi user install of hermes
+## Multi user install of hermes
 
 TODO ...
 
 
-### Regenerating the seed environment
+## Regenerating the seed environment
 
 It's pretty lame to have to trust the seed environment, luckily, rebuilding it yourself
 is simple.
