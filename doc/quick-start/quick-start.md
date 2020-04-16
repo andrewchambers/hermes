@@ -127,8 +127,7 @@ $ ./seed-env/bin/ls ./seed-env/bin
 ### A note about funny package paths
 
 Hermes packages are installed into a path based on it's cryptographic hash. In practice this
-simply means we can install many variations of the same package and not have to worry about conflicts
-ever.
+simply means we can install many variations of the same package and not have to worry about them conflicting and breakign each other.
 
 ## Uninstalling packages
 
