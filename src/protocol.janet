@@ -69,12 +69,12 @@
            (file/close p1)
            (file/close p2))
     (with [tar (process/spawn
-                  ["tar" # Note compression is done via the transport, e.g. ssh -C
-                   "-C" path
-                   "--numeric-owner"
-                   "--owner=0"
-                   "--group=0"
-                   "-c" "-f" "-" "."]
+                  ["hermes-minitar"
+                   "-c"
+                   "-z"
+                   "-f" "-"
+                   "."]
+                  :start-dir path
                   :redirects [[stdout p2]])]
       (file/close p2)
       (send-file f p1)
@@ -89,9 +89,11 @@
            (file/close p1)
            (file/close p2))
     (with [tar (process/spawn
-                  ["tar"
-                   "-C" path
-                   "-p" "-x" "-f" "-"]
+                  ["hermes-minitar"
+                   "-x"
+                   "-z"
+                   "-f" "-"]
+                  :start-dir path
                   :redirects [[stdin p1]])]
       (file/close p1)
       (recv-file f p2)

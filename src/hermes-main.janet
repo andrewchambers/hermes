@@ -313,7 +313,6 @@
     (if-let [[host from] (peg/match ssh-peg from)]
       @["ssh"
         "-oBatchMode=yes"
-        "-C"
         host
         "--" "hermes-pkgstore" "send" "-p" from]
       @["hermes-pkgstore" "send" "-p" from]))
@@ -332,7 +331,6 @@
                [host to] (peg/match ssh-peg to)]
         @["ssh"
           "-oBatchMode=yes"
-          "-C"
           host
           "--"
           "hermes-pkgstore" "recv"

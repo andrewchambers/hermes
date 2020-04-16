@@ -226,8 +226,18 @@
   (pkgstore/recv-pkg-closure
     stdout stdin (parsed-args "output") :allow-untrusted (parsed-args "allow-untrusted")))
 
+(defn sanitize-env
+  []
+  (eachk k (os/environ)
+    (os/setenv k nil))
+  (def bin (os/realpath "/proc/self/exe"))
+  (def basename (path/basename bin))
+  (def bin-path (string/slice bin 0 (- -2 (length basename))))
+  (os/setenv "PATH" bin-path))
+
 (defn main
   [&]
+  (sanitize-env)
   (def args (dyn :args))
   (with-dyns [:args (array/slice args 1)]
     (match args
