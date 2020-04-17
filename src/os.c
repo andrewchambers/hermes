@@ -400,3 +400,10 @@ Janet jmount(int argc, Janet *argv)
     return janet_wrap_nil();
 }
 
+Janet jsync(int argc, Janet *argv)
+{
+    (void)argv;
+    janet_fixarity(argc, 0);
+    sync();
+    return janet_wrap_nil();
+}

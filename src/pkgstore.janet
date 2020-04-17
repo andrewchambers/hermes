@@ -626,6 +626,7 @@
         (_hermes/storify info-path *store-owner-uid* *store-owner-gid*)
 
         (os/chmod (pkg :path) 8r555)
+        (_hermes/sync)
         (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
           {:hash (pkg :hash) :name (pkg :name)})
       nil))

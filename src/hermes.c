@@ -195,6 +195,7 @@ static const JanetReg cfuns[] = {
     {"unix-connect", unix_connect, NULL},
     {"nuke-path", nuke_path, NULL},
     {"mount", jmount, NULL},
+    {"sync", jsync, NULL},
     {NULL, NULL, NULL}
 };
 
