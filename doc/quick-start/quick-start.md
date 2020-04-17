@@ -401,11 +401,41 @@ when they are needed.
 ## Transferring packages between computers
 
 We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
-and has a package store at the same path.
+and has a package store at the same path. Hermes cp is efficient and only copies packages that do not exist on the remote server.
+
+
+localhost to remote host:
+```
+$ hermes cp ./my-package ssh://my-server.com/home/me/my-package
+```
+
+remote host to local host:
+```
+$ hermes cp ssh://my-server.com/home/me/my-package ./my-package
+```
+
+between hosts:
+```
+$ hermes cp ssh://my-server1.com/package ssh://my-server2.com/package
+```
+
+
+## Atomic deployments with Hermes
+
+Hermes cp can be used for atomic deployments:
 
 ```
-$ hermes cp ./my-package ssh://my-other-server/home/me/my-package
+$ cd my-application
+$ git pull
+$ hermes build -m ./our-hermes-definitions.janet -e my-application -o my-application
+$ hermes cp ./my-application ssh://root@my-server.com/production \
+    && ssh root@my-server.com restart-services \
+    && ssh root@my-server.com hermes gc
 ```
+
+If the network connection breaks, the existing package will not be changed. The update of the
+``` production ``` symlink is only done atomically at the end. Simply try again to safely update your system.
+
 
 ## Uninstalling hermes
 
