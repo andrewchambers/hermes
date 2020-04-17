@@ -42,10 +42,10 @@
               (do
                 (file/seek outf :set 0)
                 outf)
-            [:fail expected]
+            [:fail actual]
               (do
                 (protocol/send-msg c
-                  [:stderr (string/format "expected hash %s, mirror gave %s\n" expected hash)])
+                  [:stderr (string/format "expected hash %s, mirror gave %s\n" hash actual)])
                 (file/close outf)
                 nil))
           (do
