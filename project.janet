@@ -115,6 +115,7 @@
     --disable-all-programs
     --enable-unshare
     --disable-libblkid
+    --disable-bash-completion
     --disable-libmount
     --disable-libuuid
     --disable-libsmartcols
