@@ -98,7 +98,7 @@ Now that hermes is installed and initialized, we can start building/installing p
 First lets install the binary seed package (the root dependency of all packages.):
 ```
 $ git clone https://github.com/andrewchambers/hpkgs
-$ hermes build --module ./hpkgs/core.janet --expression seed-env --output ./seed-env
+$ hermes build --module ./hpkgs/core.hpkg --expression seed-env --output ./seed-env
 
 building /tmp/hermes-store/hpkg/9fe12ef4bec689db93b9e8bdbd3b6d752dc619a8-seed.tar.gz...
 fetching sha256:3d850f281e907d3b78599612ee1a17e63084b98947799a22a3e2a938db98e30a...
@@ -146,7 +146,7 @@ The previous package was quite boring, it just downloaded it from the internet..
 packages from source!
 
 ```
-$ hermes build -m ./hpkgs/core.janet -e core-env
+$ hermes build -m ./hpkgs/core.hpkg -e core-env
 ...
 ...build output whizzing past...
 ...
@@ -197,8 +197,8 @@ $ echo $PATH
 It's pretty sad to have to trust the seed environment, luckily, rebuilding it yourself is simple.
 
 ```
-$ hermes build -m ./hpkgs/core.janet -e seed -o seed
-$ hermes build -m ./hpkgs/core.janet -e seed-out -o seed-out
+$ hermes build -m ./hpkgs/core.hpkg -e seed -o seed
+$ hermes build -m ./hpkgs/core.hpkg -e seed-out -o seed-out
 ```
 
 You can verify your binary seed has the same hash as the binary seed you originally downloaded.
@@ -274,7 +274,7 @@ by the janet keyword :pkg-out. The builder then writes this file using 'spit' fu
 
 Finally, let us put everything we tried together:
 
-Create hello.janet
+Create hello.hpkg
 ```
 (import ./hpkgs/core)
 
@@ -297,7 +297,7 @@ Create hello.janet
 Now we can build our package:
 
 ```
-$ hermes build -m ./hello.janet -e hello
+$ hermes build -m ./hello.hpkg -e hello
 /hpkg/76013284e6ec167a99bdd58b945175fefc00d5d2-hello
 $ ./result/hello
 hello world!
@@ -388,7 +388,7 @@ easily be done with hermes, simply add the --build-host flag to your
 build command.
 
 ```
-$ hermes build -m ./hpkgs/core.janet -e seed-out --build-host ssh://your-server.com
+$ hermes build -m ./hpkgs/core.hpkg -e seed-out --build-host ssh://your-server.com
 ```
 
 The build will proceed exactly the same as a local build, but be performed on the
@@ -427,7 +427,7 @@ Hermes cp can be used for atomic deployments:
 ```
 $ cd my-application
 $ git pull
-$ hermes build -m ./our-hermes-definitions.janet -e my-application -o my-application
+$ hermes build -m ./our-hermes-definitions.hpkg -e my-application -o my-application
 $ hermes cp ./my-application ssh://root@my-server.com/production \
     && ssh root@my-server.com restart-services \
     && ssh root@my-server.com hermes gc

@@ -1,7 +1,9 @@
 (import argparse)
 (import sh)
+(import uri)
 (import path)
 (import process)
+(import ./download)
 (import ./tempdir)
 (import ./fetch)
 (import ./hash)
@@ -33,14 +35,77 @@
      (os/setenv k (environ k)))
   (os/cd cwd))
 
+(defn- load-hpkg-url
+  [url args]
+  (with [f (file/temp)]
+    (match (download/download url |(file/write f $))
+      :ok
+        (file/seek f :set 0)
+      [:fail err-msg]
+        (error err-msg))
 
-(defn load-pkgs
-  [fpath]
+    # XXX This custom env should disappear.
+    # How to handle relatives here? https://github.com/janet-lang/janet/issues/352
+    (def env (make-env))
+    (put env :hermes-current-url url)
+    (dofile f ;args :env env)))
 
-  (def saved-process-env (save-process-env)) # XXX shouldn't be needed with proper sandboxed env.
+(defn- relative-import-path?
+  [path]
+  (or (string/has-prefix? "./" path)
+      (string/has-prefix? "../" path)))
+
+(defn- check-hpkg-url
+  [path]
+  (if-let [parsed-url (uri/parse path)
+           url-scheme (parsed-url :scheme)
+           url-host (parsed-url :host)
+           url-path (parsed-url :path)]
+    (string url-scheme "://" url-host url-path ".hpkg")
+    (if-let [is-relpath (relative-import-path? path)
+             current-url (dyn :hermes-current-url)
+             parsed-url (uri/parse current-url)
+             url-scheme (parsed-url :scheme)
+             url-host (parsed-url :host)
+             url-path (parsed-url :path)]
+      (do
+        (def url-path-dir (string/slice url-path 0 (- -2 (length (path/basename url-path)))))
+        # XXX Work around bug in https://github.com/janet-lang/path/issues/2
+        # by forcing the path to not be absolute.
+        (def url-path-dir
+          (if (string/has-prefix? "/" url-path-dir)
+            (string/slice url-path-dir 1)
+            url-path-dir))
+        (def abs-path (path/join url-path-dir path))
+        # XXX Same bug as above, our path should be empty
+        (def abs-path (if (string/has-prefix? "." abs-path) (string/slice abs-path 1) abs-path))
+        (string url-scheme "://" url-host "/" abs-path  ".hpkg")))))
+
+(defn- load-hpkg-path
+  [path args]
+  (dofile path ;args))
+
+(defn- check-hpkg-path
+  [path]
+  (def path (string path ".hpkg"))
+  (def path
+    (if-let [is-relpath (relative-import-path? path)
+             current-file (dyn :current-file)]
+      (do
+        (def path-dir (string/slice current-file 0 (- -2 (length (path/basename current-file)))))
+        (def path (path/abspath (path/join path-dir path))))
+      (when (string/has-prefix? "/" path)
+        (path/normalize path))))
+  path)
+
+(defn- in-hpkg-context
+  [f]
+  (def saved-process-env (save-process-env))
   (def saved-root-env (merge-into @{} root-env))
-  (def saved-mod-paths (array ;module/paths))
-  (def saved-mod-cache (merge-into @{} module/cache))
+  (def saved-mod-loaders (merge-into @{} module/loaders))
+  (def saved-mod-paths  (array ;module/paths))
+  (def saved-mod-cache  (merge-into @{} module/cache))
+  
 
   (defer (do
            (clear-table module/cache)
@@ -51,6 +116,9 @@
 
            (clear-table root-env)
            (merge-into root-env saved-root-env)
+
+           (clear-table module/loaders)
+           (merge-into module/loaders saved-mod-loaders)
            
            (restore-process-env saved-process-env))
     
@@ -60,23 +128,17 @@
     # Clear module cache.
     (clear-table module/cache)
     
-    # Remove all paths, to ensure hermetic package env.
-    (defn- check-. [x] (if (string/has-prefix? "." x) x))
     (clear-array module/paths)
-    (array/concat module/paths @[[":cur:/:all:.janet" :source check-.]])
 
+    (put module/loaders :hpkg-url load-hpkg-url)
+    (put module/loaders :hpkg-path load-hpkg-path)
+    (array/push module/paths [check-hpkg-url  :hpkg-url])
+    (array/push module/paths [check-hpkg-path :hpkg-path])
     (clear-table builtins/*content-map*)
 
-    # XXX it would be nice to not exit on error, but raise an error.
-    # this is easier for now though.
-    (merge-into @{} builtins/hermes-env (dofile fpath :exit true))))
+    (f)))
 
-(defn- unknown-command
-  []
-  (eprintf "unknown command: %v" (get (dyn :args) 0))
-  (os/exit 1))
-
-(defn eval-string-in-env
+(defn- eval-expression-in-env
   [str env]
   (var state (string str))
   (defn chunks [buf _]
@@ -101,6 +163,34 @@
                 :source "--expression"
                 :env env})
   returnval)
+
+(defn load-pkgs
+  [expr &opt module-path]
+  (in-hpkg-context
+    (fn []
+      (def env
+        (if module-path
+          (do
+            (def module-path
+              (if (string/has-suffix? ".hpkg" module-path)
+                (string/slice module-path 0 -6)
+                module-path))
+            # Convert to absolute so we don't have to worry
+            # about where our current path is relative to.
+            (def module-path
+              (if-let [parsed-url (uri/parse module-path)
+                       url-scheme (parsed-url :scheme)]
+                module-path
+                (path/abspath module-path)))
+            (merge-into @{} builtins/hermes-env (require module-path)))
+          (merge-into @{} builtins/hermes-env)))
+      (eval-expression-in-env expr env))))
+
+(defn- unknown-command
+  []
+  (eprintf "unknown command: %v" (get (dyn :args) 0))
+  (os/exit 1))
+
 
 (def- init-params
   ["Init the hermes package store."])
@@ -153,12 +243,7 @@
   (unless parsed-args
     (os/exit 1))
   
-  (def env 
-    (if (parsed-args "module")
-      (load-pkgs (parsed-args "module"))
-      builtins/hermes-env))
-
-  (def pkg (eval-string-in-env (get parsed-args "expression" "default-pkg") env))
+  (def pkg (load-pkgs (get parsed-args "expression" "default-pkg")  (parsed-args "module")))
 
   (unless (= (type pkg) :hermes/pkg)
     (eprintf "expression did not return a valid package, got %v" pkg)

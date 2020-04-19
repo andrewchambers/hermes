@@ -1,6 +1,8 @@
 (import sh)
 (import path)
+(import uri)
 (import ./hash)
+(import ./download)
 (import ./fetch)
 (import ../build/_hermes)
 
@@ -79,28 +81,48 @@
         (fetch/fetch* hash (string (dyn :pkg-out) "/" file-name)))))
 
 (defn local-file*
-  [path &opt hash]
-  (default hash (hash/hash "sha256" path))
-  (fetch :url (string "file://" path) :hash hash))
+  [path relative-to &opt hash]
+  (def path
+    (cond
+      (string? path)
+        path
+      (symbol? path)
+        (string path)
+      (error "path must be a string or symbol")))
+  
+  (when (path/abspath? path)
+    (error "path must be a relative path"))
+
+  (if-let [parsed-url (uri/parse relative-to)
+           url-scheme (parsed-url :scheme)
+           url-host (parsed-url :host)
+           url-path (parsed-url :path)]
+      (do 
+        (def url (string url-scheme "://" url-host (path/join url-path path)))
+        (default hash 
+          (with [tmpf (file/temp)]
+            (match (download/download url |(file/write tmpf $))
+              :ok
+                (file/seek tmpf :set 0)
+              [:fail err-msg]
+                (error err-msg))
+            (hash/hash "sha256" tmpf)))
+        (fetch :url url :hash hash))
+    (do
+      (def path (path/join relative-to path))
+      (default hash (hash/hash "sha256" path))
+      (fetch :url (string "file://" path) :hash hash))))
 
 (defmacro local-file
   [path &opt hash]
-  (def source (path/abspath (or (dyn :source) (path/join (os/cwd) "--expression"))))
+
+  (def source (or (dyn :hermes-current-url)
+                  (path/abspath (or (dyn :current-file)
+                                    (path/join (os/cwd) "-")))))
+  # XXX Lucky for us this works on urls, obviously this isn't gonna work on windows.
   (def basename (path/basename source))
   (def dir (string/slice source 0 (- -2 (length basename))))   # XXX upstream path/dir.
-  (defn local-path
-    [path]
-    (def path
-      (cond
-        (string? path)
-          path
-        (symbol? path)
-          (string path)
-        (error "path must be a string or symbol")))
-    (when (path/abspath? path)
-      (error "path must be a relative path"))
-    (path/join dir path))
-  ~(,local-file* (,local-path ,path) ,hash))
+  ~(,local-file* ,path ,dir ,hash))
 
 (def hermes-env (merge-into @{} root-env))
 (put hermes-env 'pkg @{:value pkg})

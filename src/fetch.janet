@@ -1,4 +1,5 @@
 (import process)
+(import ./download)
 (import ./protocol)
 (import ./hash)
 (import ../build/_hermes)
@@ -13,30 +14,18 @@
 
   (defn fetch-from-url
     [url hash]
-    (def [pipe> pipe<] (process/pipe))
-    (defer (do (:close pipe>)
-               (:close pipe<))
-      (with [errorf (file/temp)]
-      (with [curl (process/spawn 
-                    ["curl" "--silent" "--show-error" "--fail" "-L" url]
-                    :redirects [[stdout pipe<] [stderr errorf]])]
-        (:close pipe<)
-        
-        (def outf (file/temp))
-        (def buf @"")
 
-        (defn get-file-chunks []
-          (file/read pipe> 131072 (buffer/clear buf))
-          (if (empty? buf)
-            (do
-              (file/seek outf :set 0)
-              nil)
-            (do
-              (file/write outf buf)
-              (get-file-chunks))))
-        (get-file-chunks)
+    (def outf (file/temp))
 
-        (if (zero? (process/wait curl))
+    (defn dl-progress
+      [buf]
+      # TODO send progress report to client
+      (file/write outf buf))
+
+    (match (download/download url dl-progress)
+      :ok
+        (do
+          (file/seek outf :set 0)
           (match (hash/check outf hash)
             :ok
               (do
@@ -47,11 +36,12 @@
                 (protocol/send-msg c
                   [:stderr (string/format "expected hash %s, mirror gave %s\n" hash actual)])
                 (file/close outf)
-                nil))
-          (do
-            (file/seek errorf :set 0)
-            (def err-msg (string "fetch failed:\n" (file/read errorf :all)))
-            (protocol/send-msg c [:stderr err-msg])))))))
+                nil)))
+      [:fail err-msg]
+        (do 
+          (protocol/send-msg c [:stderr err-msg])
+          (file/close outf)
+          nil)))
 
   (defn fetch-from-mirrors
     [mirrors hash]
