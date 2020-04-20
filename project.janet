@@ -22,6 +22,8 @@
 
 (post-deps
 
+(os/setenv "PKG_CONFIG_PATH" (string (os/cwd) "/third-party/install-root/lib/pkgconfig"))
+
 (defn src-file?
   [path]
   (def ext (path/ext path))
@@ -90,10 +92,11 @@
       (os/cd src)
       (when (os/stat "./configure")
         (sh/$ ~[./configure ,(string "--prefix=" install-root) ,;extra-configure]))
-      (sh/$ ~[make ,(string "PREFIX=" install-root) ;extra-make]))
+      (sh/$ ["make" (string "PREFIX=" install-root) ;extra-make]))
     (sh/$ ~[touch ,stamp-built]))
 
   (rule stamp-installed [stamp-built]
+    (eprint "installing " name)
     (sh/$ ~[mkdir -p ,install-root])
     (def wd (os/cwd))
     (defer (os/cd wd)
@@ -104,17 +107,37 @@
   (add-dep "build" stamp-installed))
 
 (declare-third-party
+  :name "libarchive"
+  :src-url "https://www.libarchive.org/downloads/libarchive-3.4.2.tar.gz"
+  :src-sha256sum "b60d58d12632ecf1e8fad7316dc82c6b9738a35625746b47ecdcaf4aed176176"
+  :extra-configure [
+    "CFLAGS=-fPIC -O3"
+  ])
+
+(declare-third-party
+  :name "libbsd"
+  :src-url "https://libbsd.freedesktop.org/releases/libbsd-0.10.0.tar.xz"
+  :src-sha256sum "34b8adc726883d0e85b3118fa13605e179a62b31ba51f676136ecb2d0bc1a887")
+
+(declare-third-party
   :name "signify"
   :src-url "https://github.com/aperezdc/signify/releases/download/v29/signify-29.tar.xz"
-  :src-sha256sum "a9c1c3c2647359a550a4a6d0fb7b13cbe00870c1b7e57a6b069992354b57ecaf")
+  :src-sha256sum "a9c1c3c2647359a550a4a6d0fb7b13cbe00870c1b7e57a6b069992354b57ecaf"
+  :extra-make [
+    "EXTRA_LDFLAGS=--static"
+  ])
+
+(add-dep "third-party/signify/stamp_built" "third-party/libbsd/stamp_installed")
 
 (declare-third-party
   :name "util-linux"
   :src-url "https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.35/util-linux-2.35.tar.xz"
   :src-sha256sum "b3081b560268c1ec3367e035234e91616fa7923a0afc2b1c80a2a6d8b9dfe2c9"
   :extra-configure ~[
+    "CFLAGS=--static"
     --disable-all-programs
     --enable-unshare
+    --enable-static-programs=unshare
     --disable-libblkid
     --disable-bash-completion
     --disable-libmount
@@ -132,15 +155,15 @@
   :do-patch
   (fn []
     (as-> (slurp "Makefile") _
-          (string/replace " -static " " " _)
+          (string/replace " --static " " " _)
           (string _ ".PHONY: install\ninstall: \n\tcp dumb-init $(PREFIX)/bin/dumb-init")
           (spit "Makefile" _))))
 
 (rule "build/hermes-tempdir" ["src/hermes-tempdir-main.c"]
-  (sh/$ ~[,(os/getenv "CC" "gcc") src/hermes-tempdir-main.c -o build/hermes-tempdir]))
+  (sh/$ ~[,(os/getenv "CC" "gcc") --static "src/fts.c" src/hermes-tempdir-main.c -o build/hermes-tempdir]))
 
-(rule "build/hermes-minitar" ["src/hermes-minitar-main.c"]
-  (sh/$ ~[,(os/getenv "CC" "gcc") src/hermes-minitar-main.c -larchive -o build/hermes-minitar]))
+(rule "build/hermes-minitar" ["src/hermes-minitar-main.c" "third-party/libarchive/stamp_installed"]
+  (sh/$ ~[,(os/getenv "CC" "gcc") --static  src/hermes-minitar-main.c ./third-party/install-root/lib/libarchive.a -I ./third-party/install-root/include  -o build/hermes-minitar]))
 
 (rule "build/hermes-signify" ["third-party/signify/stamp_installed"]
   (sh/$ ~[cp "third-party/install-root/bin/signify" "build/hermes-signify"]))
@@ -156,7 +179,8 @@
   :name "_hermes"
   :headers ["src/hermes.h"
             "src/sha1.h"
-            "src/sha256.h"]
+            "src/sha256.h"
+            "src/fts.h"]
   :source ["src/hermes.c"
            "src/scratchvec.c"
            "src/sha1.c"
@@ -168,22 +192,29 @@
            "src/base16.c"
            "src/storify.c"
            "src/os.c"
-           "src/unpack.c"]
-  :lflags ["-larchive"])
+           "src/unpack.c"
+           "src/fts.c"]
+  :cflags ["-I./third-party/install-root/include"]
+  :lflags ["./third-party/install-root/lib/libarchive.a"])
+
+(add-dep "build/_hermes.so" "third-party/libarchive/stamp_installed")
 
 (declare-executable
   :name "hermes"
   :entry "src/hermes-main.janet"
+  :lflags ["-static"]
   :deps all-src)
 
 (declare-executable
   :name "hermes-pkgstore"
   :entry "src/hermes-pkgstore-main.janet"
+  :lflags ["-static"]
   :deps all-src)
 
 (declare-executable
   :name "hermes-builder"
   :entry "src/hermes-builder-main.janet"
+  :lflags ["-static"]
   :deps all-src)
 
 (def output-bins
@@ -192,6 +223,7 @@
    "hermes-builder"
    "hermes-tempdir"
    "hermes-signify"
+   "hermes-minitar"
    "hermes-unshare"
    "hermes-dumb-init"])
 

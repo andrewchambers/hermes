@@ -43,12 +43,7 @@
         (file/seek f :set 0)
       [:fail err-msg]
         (error err-msg))
-
-    # XXX This custom env should disappear.
-    # How to handle relatives here? https://github.com/janet-lang/janet/issues/352
-    (def env (make-env))
-    (put env :hermes-current-url url)
-    (dofile f ;args :env env)))
+    (dofile f ;args)))
 
 (defn- relative-import-path?
   [path]
@@ -63,22 +58,15 @@
            url-path (parsed-url :path)]
     (string url-scheme "://" url-host url-path ".hpkg")
     (if-let [is-relpath (relative-import-path? path)
-             current-url (dyn :hermes-current-url)
+             current-url (dyn :source)
+             source-is-string (string? current-url) # Possible :source is a file.
              parsed-url (uri/parse current-url)
              url-scheme (parsed-url :scheme)
              url-host (parsed-url :host)
              url-path (parsed-url :path)]
       (do
         (def url-path-dir (string/slice url-path 0 (- -2 (length (path/basename url-path)))))
-        # XXX Work around bug in https://github.com/janet-lang/path/issues/2
-        # by forcing the path to not be absolute.
-        (def url-path-dir
-          (if (string/has-prefix? "/" url-path-dir)
-            (string/slice url-path-dir 1)
-            url-path-dir))
-        (def abs-path (path/join url-path-dir path))
-        # XXX Same bug as above, our path should be empty
-        (def abs-path (if (string/has-prefix? "." abs-path) (string/slice abs-path 1) abs-path))
+        (def abs-path (path/posix/join url-path-dir path))
         (string url-scheme "://" url-host "/" abs-path  ".hpkg")))))
 
 (defn- load-hpkg-path

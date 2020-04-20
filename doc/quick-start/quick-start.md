@@ -15,7 +15,7 @@ you are interested in diving into using Hermes.
 
 Installing from source:
 
-- Ensure you have latest janet from git, pkg-config, curl, libarchive and libbsd installed.
+- Ensure you have latest janet from git, pkg-config, curl, and a musl libc gcc toolchain installed.
 
 ```
 $ git clone https://github.com/andrewchambers/hermes

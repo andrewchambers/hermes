@@ -1,0 +1,21 @@
+(import https://raw.githubusercontent.com/andrewchambers/hpkgs/49aa40b0776789c1741124bb4ebd35c52c23e7f5/core)
+
+(def janet-src
+  (fetch
+    :url "https://github.com/janet-lang/janet/tarball/63812c9f80e80664d3dd334a148283e1dcfeea4f"
+    :file-name "janet.tar.gz"
+    :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749"))
+
+(def janet
+  (core/std-pkg
+    :name "janet"
+    :src janet-src
+    :bin-inputs [core/core-build-env]))
+
+(def dev-env
+  (core/make-combined-env
+    :bin-pkgs [core/core-build-env janet]
+    :post-build 
+      |(do
+        (os/cd (string (dyn :pkg-out) "/bin"))
+        (os/symlink "./pkgconf" "./pkg-config"))))

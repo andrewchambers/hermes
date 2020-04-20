@@ -5,8 +5,8 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <sys/stat.h>
-#include <fts.h>
 #include <signal.h>
+#include "fts.h"
 
 void cleanup(const char *dir)
 {

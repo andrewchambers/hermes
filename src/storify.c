@@ -4,9 +4,9 @@
 #include <utime.h>
 #include <string.h>
 #include <unistd.h>
-#include <fts.h>
 #include <janet.h>
 #include <errno.h>
+#include "fts.h"
 #include "hermes.h"
 
 
