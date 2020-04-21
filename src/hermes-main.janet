@@ -44,7 +44,11 @@
         (file/seek f :set 0)
       [:fail err-msg]
         (error err-msg))
-    (dofile f ;args)))
+
+    (put module/loading url true)
+    (def newenv (dofile f ;args :source url))
+    (put module/loading url nil)
+    newenv))
 
 (defn- relative-import-path?
   [path]
@@ -72,7 +76,10 @@
 
 (defn- load-hpkg-path
   [path args]
-  (dofile path ;args))
+  (put module/loading path true)
+  (def newenv (dofile path ;args))
+  (put module/loading path nil)
+  newenv)
 
 (defn- check-hpkg-path
   [path]

@@ -248,27 +248,29 @@
         (error "unable to walk closure roots from different package stores")))
     (enqueue (path/basename abs-path)))
   
-  (unless (or (nil? hpkg-path) (string/has-suffix? "/hpkg" hpkg-path))
-    (error "unable to walk closure outside of $STORE/hpkg"))
+  (if (nil? hpkg-path)
+    (assert (empty? ref-work-q))
+    (unless (string/has-suffix? "/hpkg" hpkg-path)
+      (error "unable to walk closure outside of $STORE/hpkg")))
 
   (defn -walk-store-closure []
     (unless (empty? ref-work-q)
       (def ref (array/pop ref-work-q))
       (def pkg-path (string hpkg-path "/" ref))
       (def pkg-info (jdn/decode (slurp (string pkg-path "/.hpkg.jdn"))))
-      (when f
-        (f pkg-path pkg-info))
       (def new-refs
         (if-let [forced-refs (pkg-info :force-refs)]
           forced-refs
           (let [unfiltered-refs (array/concat @[]
-                                  (get pkg-info :scanned-refs [])
+                                  (pkg-info :scanned-refs)
                                   (get pkg-info :extra-refs []))]
             (if-let [weak-refs (pkg-info :weak-refs)]
               (do
                 (def weak-refs-lut (reduce |(put $0 $1 true) @{} weak-refs))
                 (filter weak-refs-lut unfiltered-refs))
               unfiltered-refs))))
+        (when f
+          (f pkg-path pkg-info new-refs))
       (each ref new-refs
         (enqueue ref))
       (-walk-store-closure)))
@@ -686,8 +688,8 @@
       (error (string/format "unable to send %v, not a package" pkg-path)))
 
     (var refs @[])
-    (walk-store-closure [pkg-root] (fn [path info]
-                               (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
+    (walk-store-closure [pkg-root] (fn [path info _]
+                                     (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
     (set refs (reverse refs))
 
     (protocol/send-msg out [:send-closure refs])
