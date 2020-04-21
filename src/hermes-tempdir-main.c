@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <signal.h>
 #include "fts.h"
@@ -54,7 +55,7 @@ finish:
 
 static volatile sig_atomic_t interrupted = 0;
 
-static void sighandler(int signo) {
+static void sighandler(int signo, siginfo_t *siginfo, void *context) {
     if (signo != SIGALRM) {
         interrupted = 1;
     }
@@ -63,11 +64,21 @@ static void sighandler(int signo) {
 int main()
 {
     umask(0077);
-    signal(SIGINT,sighandler);
-    signal(SIGHUP,sighandler);
-    signal(SIGQUIT,sighandler);
-    signal(SIGPIPE,sighandler);
-    signal(SIGTERM,sighandler);
+
+    struct sigaction act;
+    memset (&act, 0, sizeof(act));
+ 
+    act.sa_sigaction = &sighandler;
+    act.sa_flags = SA_SIGINFO;
+ 
+    if ((sigaction(SIGINT, &act, NULL) < 0)
+        || (sigaction(SIGHUP, &act, NULL) < 0)
+        || (sigaction(SIGQUIT, &act, NULL) < 0)
+        || (sigaction(SIGPIPE, &act, NULL) < 0)
+        || (sigaction(SIGTERM, &act, NULL) < 0)
+        || (sigaction(SIGALRM, &act, NULL) < 0)) {
+        perror ("sigaction");
+    }
 
     char template[] = "/tmp/hermes-tmpdir.XXXXXX";
     char *dir_name = mkdtemp(template);
@@ -84,7 +95,6 @@ int main()
         // alarm ensures cleanup happens
         // even when term interrupts happened in window
         // between mkdir and read.
-        signal(SIGALRM, sighandler);
         alarm(5);
         errno = 0;
         int rc = read(STDIN_FILENO, buf, 1);

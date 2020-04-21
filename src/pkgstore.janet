@@ -224,7 +224,7 @@
   (def hash (first (pkg-parts-from-dir-name dir-name)))
   (has-pkg-with-hash db hash))
 
-(defn- walk-closure
+(defn walk-store-closure
   [roots &opt f]
 
   (def ref-work-q @[])
@@ -236,14 +236,25 @@
       (put visited ref true)
       (array/push ref-work-q ref)))
 
+  (var hpkg-path nil)
+
   (each root roots 
     (def abs-path (os/realpath root))
+    (def pkg-ref (path/basename abs-path))
+    (def root-hpkg-path (string/slice abs-path 0 (- -2 (length pkg-ref))))
+    (if-not hpkg-path
+      (set hpkg-path root-hpkg-path)
+      (unless (= root-hpkg-path hpkg-path)
+        (error "unable to walk closure roots from different package stores")))
     (enqueue (path/basename abs-path)))
+  
+  (unless (or (nil? hpkg-path) (string/has-suffix? "/hpkg" hpkg-path))
+    (error "unable to walk closure outside of $STORE/hpkg"))
 
-  (defn -walk-closure []
+  (defn -walk-store-closure []
     (unless (empty? ref-work-q)
       (def ref (array/pop ref-work-q))
-      (def pkg-path (string *store-path* "/hpkg/" ref))
+      (def pkg-path (string hpkg-path "/" ref))
       (def pkg-info (jdn/decode (slurp (string pkg-path "/.hpkg.jdn"))))
       (when f
         (f pkg-path pkg-info))
@@ -260,8 +271,8 @@
               unfiltered-refs))))
       (each ref new-refs
         (enqueue ref))
-      (-walk-closure)))
-  (-walk-closure)
+      (-walk-store-closure)))
+  (-walk-store-closure)
   visited)
 
 (defn gc
@@ -301,7 +312,7 @@
     (unless ignore-ttl
       (process-ttl-roots))
     (process-roots)
-    (def visited (walk-closure root-pkg-paths))
+    (def visited (walk-store-closure root-pkg-paths))
 
     (each dirname (os/dir (string *store-path* "/hpkg/"))
       (def pkg-dir (string *store-path* "/hpkg/" dirname))
@@ -364,7 +375,7 @@
       (error (string/format "package content must be a hash or directory description struct")))
     nil)
 
-(defn- compute-build-dep-info
+(defn compute-build-dep-info
   [pkg]
   (def deps @{})
   (def order @[])
@@ -675,7 +686,7 @@
       (error (string/format "unable to send %v, not a package" pkg-path)))
 
     (var refs @[])
-    (walk-closure [pkg-root] (fn [path info]
+    (walk-store-closure [pkg-root] (fn [path info]
                                (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
     (set refs (reverse refs))
 

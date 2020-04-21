@@ -5,6 +5,7 @@
 (import process)
 (import ./download)
 (import ./tempdir)
+(import ./pkgstore)
 (import ./fetch)
 (import ./hash)
 (import ./builtins)
@@ -234,8 +235,7 @@
   (def pkg (load-pkgs (get parsed-args "expression" "default-pkg")  (parsed-args "module")))
 
   (unless (= (type pkg) :hermes/pkg)
-    (eprintf "expression did not return a valid package, got %v" pkg)
-    (os/exit 1))
+    (error (string/format "expression did not return a valid package, got %v" pkg)))
 
   (def tmpdir (tempdir/tempdir))
   (os/chmod (tmpdir :path) 8r700)
@@ -428,6 +428,65 @@
                    (zero? recv-exit))
         (error "copy failed"))))))
 
+
+(def- show-build-deps-params
+  ["Show the dependency DAG for a package as a set of trees."
+   "module"
+     {:kind :option
+      :short "m"
+      :help "Path to the module in which to run 'expression'."}
+   "expression"
+     {:kind :option
+      :short "e"
+      :help "Expression to show build time dependency tree."}
+   "max-depth"
+     {:kind :option
+      :short "d"
+      :help "Maximum dependency depth to show."}
+   "names"
+     {:kind :flag
+      :short "n"
+      :help "When a package has a name, display only the name."}])
+
+(defn show-build-deps
+  []
+  (def parsed-args (argparse/argparse ;show-build-deps-params))
+  (unless parsed-args
+    (os/exit 1))
+  
+  (var pkg (load-pkgs (get parsed-args "expression" "default-pkg")  (parsed-args "module")))
+
+  (unless (= (type pkg) :hermes/pkg)
+    (error (string/format "expression did not return a valid package, got %v" pkg)))
+
+  (def max-depth (if-let [d (parsed-args "max-depth")] (scan-number d) math/inf))
+
+  # XXX Work around https://github.com/andrewchambers/hermes/issues/4
+  (set pkg (unmarshal (marshal pkg builtins/registry) builtins/load-registry))
+
+  (def dep-info (pkgstore/compute-build-dep-info pkg))
+  (each p (dep-info :order)
+    # Freeze the packages in order as children must be frozen first.
+    (_hermes/pkg-freeze *store-path* builtins/registry p))
+  
+  (defn- print-dep-tree
+    [pkg depth prefix prefix-part]
+    (print prefix
+      (if (parsed-args "names")
+        (or (pkg :name) (pkg :hash))
+        (path/basename (pkg :path))))
+    (when-let [deps (get-in dep-info [:deps pkg])]
+      (when (pos? depth)
+        (def l (-> deps length dec))
+        (eachp [i d] (sorted deps)
+          (print-dep-tree
+            d (dec depth)
+            (string prefix-part (if (= i l) " └─"  " ├─"))
+            (string prefix-part (if (= i l) "   "  " │ ")))))))
+
+  (print-dep-tree pkg max-depth "" ""))
+
+
 (defn main
   [&]
   (def args (dyn :args))
@@ -438,5 +497,6 @@
       [_ "build"] (build)
       [_ "gc"] (gc)
       [_ "cp"] (cp)
+      [_ "show-build-deps"] (show-build-deps)
       _ (unknown-command)))
   nil)
