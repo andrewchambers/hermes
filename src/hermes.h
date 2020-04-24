@@ -14,6 +14,12 @@ typedef struct {
 } HashState;
 
 typedef struct {
+    // Packages are only allowed to depend on
+    // sequence numbers created before them.
+    // We use this to enforce an absense of circular
+    // dependency.
+    Janet sequence_number;
+
     char frozen;  /* Once a package is frozen,
                      It's hash has been computed and
                      the path on disk has been computed.

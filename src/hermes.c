@@ -9,6 +9,7 @@
 static int pkg_gcmark(void *p, size_t s) {
     (void)s;
     Pkg *pkg = p;
+    janet_mark(pkg->sequence_number);
     janet_mark(pkg->builder);
     janet_mark(pkg->name);
     janet_mark(pkg->content);
@@ -25,10 +26,13 @@ static int pkg_get(void *ptr, Janet key, Janet *out) {
     if (janet_keyeq(key, "hash")) {
         *out = pkg->hash;
         return 1;
-    } else if (janet_keyeq(key, "path")) {
+    } else if (janet_keyeq(key, "sequence-number")) {
+        *out = pkg->sequence_number;
+        return 1;
+    }  else if (janet_keyeq(key, "path")) {
         *out = pkg->path;
         return 1;
-    } else if (janet_keyeq(key, "builder")) {
+    }  else if (janet_keyeq(key, "builder")) {
         *out = pkg->builder;
         return 1;
     } else if (janet_keyeq(key, "name")) {
@@ -52,6 +56,9 @@ static int pkg_get(void *ptr, Janet key, Janet *out) {
 }
 
 static void validate_pkg(Pkg *pkg) {
+    if (!janet_checktype(pkg->sequence_number, JANET_NUMBER))
+        janet_panicf("sequence-number must be a number, got %v", pkg->sequence_number);
+
     if (!janet_checktypes(pkg->builder, JANET_TFLAG_NIL|JANET_TFLAG_FUNCTION))
         janet_panicf("builder must be a function or nil, got %v", pkg->builder);
 
@@ -111,6 +118,7 @@ static void validate_pkg(Pkg *pkg) {
 static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
     Pkg *pkg = p;
     janet_marshal_abstract(ctx, p);
+    janet_marshal_janet(ctx, pkg->sequence_number);
     janet_marshal_janet(ctx, pkg->builder);
     janet_marshal_janet(ctx, pkg->name);
     janet_marshal_janet(ctx, pkg->hash);
@@ -130,6 +138,7 @@ static void pkg_marshal(void *p, JanetMarshalContext *ctx) {
 
 static void* pkg_unmarshal(JanetMarshalContext *ctx) {
     Pkg *pkg = janet_unmarshal_abstract(ctx, sizeof(Pkg));
+    pkg->sequence_number = janet_unmarshal_janet(ctx);
     pkg->builder = janet_unmarshal_janet(ctx);
     pkg->name = janet_unmarshal_janet(ctx);
     pkg->hash = janet_unmarshal_janet(ctx);
@@ -146,7 +155,10 @@ static void* pkg_unmarshal(JanetMarshalContext *ctx) {
 static Janet pkg(int argc, Janet *argv) {
     janet_fixarity(argc, 6);
 
+    static uint64_t sequence_number = 0;
+
     Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
+    pkg->sequence_number = janet_wrap_number(sequence_number++);
     pkg->frozen = 0;
     pkg->builder = argv[0];
     pkg->name = argv[1];

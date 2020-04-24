@@ -220,11 +220,16 @@ static void hash_one_abstract(HashState *st, Janet x, int flags) {
     hash_one(st, janet_csymbolv(at->name), flags + 1);
     if (at == &pkg_type) {
         Pkg *pkg = abstract;
-        if (!janet_checktype(pkg->hash, JANET_STRING)) {
-            janet_panic("package does not have computed hash");
-        }
-        JanetString hash = janet_unwrap_string(pkg->hash);
-        pushbytes(st, hash, janet_string_length(hash));
+        // We do NOT recurse into other packages. Packages are
+        // identified by their hash. If the hash is nil It 
+        // means there is a circular dependency somewhere. This 
+        // can sometimes occur due to Janet's closure implementation,
+        // or a reference to mutable types that have been altered
+        // after package construction.
+        hash_one(st, pkg->hash, flags + 1);
+    }  else if (at == &janet_peg_type) {
+        JanetPeg *peg = abstract;
+        janet_panicf("TODO hash PEG");
     } else {
         janet_panicf("unable to hash %v", x);
     }

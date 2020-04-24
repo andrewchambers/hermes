@@ -380,19 +380,25 @@
 (defn compute-build-dep-info
   [pkg]
   (def deps @{})
+  (def all-pkgs @{pkg true})
   (def order @[])
   (defn compute-build-dep-info2
     [pkg]
     (if (deps pkg)
       nil
-      (let [direct-deps (_hermes/pkg-dependencies pkg)]
-        (put deps pkg (keys direct-deps))
-        (eachk dep direct-deps
+      (let [pkg-seq-num (pkg :sequence-number)
+            direct-deps (keys (_hermes/pkg-dependencies pkg))
+            filtered-deps (filter |(< ($ :sequence-number) pkg-seq-num ) direct-deps)]
+        (each d direct-deps
+          (put all-pkgs d true))
+        (put deps pkg filtered-deps)
+        (each dep filtered-deps
           (compute-build-dep-info2 dep))
         (array/push order pkg))))
   (compute-build-dep-info2 pkg)
   {:deps deps
-   :order order})
+   :order order
+   :all-pkgs (keys all-pkgs)})
 
 (defn- ref-scan
   [db pkg]
@@ -459,7 +465,16 @@
   # Copy registry so we can update it as we build packages.
   (def registry (merge-into @{} builtins/registry))
   
-  (each p (dep-info :order)
+  (each p (dep-info :all-pkgs)
+    # Initially all reachable packages are marked
+    # so that marshalling efficiently ignores them
+    # when we don't need them. 
+    #
+    # As we perform builds in topological build order,
+    # We can remove the circular reference tag, and
+    # during each build, we allow marshalling of the
+    # one builder we are actually calling.
+    (put registry p '*circular-reference*)
     (put registry (p :builder) '*pkg-noop-build*))
 
   (each p (dep-info :order)
@@ -474,22 +489,28 @@
 
     (defn build-pkg
       [pkg]
-      (if (has-pkg-with-hash db (pkg :hash))
-        true
-        (do
-          (var deps-ready true)
-          (each dep (get-in dep-info [:deps pkg])
-            (set deps-ready (and (build-pkg dep) deps-ready)))
-          
-            (if-let [_ deps-ready
-                     flock (acquire-build-lock (pkg :hash) :noblock :exclusive)]
-              (defer (:close flock)
-                # After aquiring the package lock, check again that it doesn't exist.
-                # This is in case multiple builders were waiting, and another did the build.
-                (when (not (has-pkg-with-hash db (pkg :hash)))
-                  (run-builder pkg))
-                true)
-              false))))
+      (def pkg-ready
+        (if (has-pkg-with-hash db (pkg :hash))
+            true
+          (do
+            (var deps-ready true)
+            (each dep (get-in dep-info [:deps pkg])
+              (set deps-ready (and (build-pkg dep) deps-ready)))
+            
+              (if-let [_ deps-ready
+                       flock (acquire-build-lock (pkg :hash) :noblock :exclusive)]
+                (defer (:close flock)
+                  # After aquiring the package lock, check again that it doesn't exist.
+                  # This is in case multiple builders were waiting, and another did the build.
+                  (when (not (has-pkg-with-hash db (pkg :hash)))
+                    (run-builder pkg))
+                  true)
+                false))))
+      (when pkg-ready
+        # The package should no longer marshal as a circular reference.
+        # as we know all it/all of it's dependencies are on disk.
+        (put registry pkg nil))
+      pkg-ready)
     
     (set run-builder 
       (fn run-builder
@@ -526,16 +547,16 @@
               (def do-build 
                 # wrapper to minimize closure over capturing.
                 (do
-                  (defn make-builder [pkg build-dir fetch-socket-path parallelism]
+                  (defn make-builder [pkg-path pkg-builder build-dir fetch-socket-path parallelism]
                     (fn do-build []
                       (os/cd build-dir)
                       (eachk k (os/environ)
                         (os/setenv k nil))
-                      (with-dyns [:pkg-out (pkg :path)
+                      (with-dyns [:pkg-out pkg-path
                                   :parallelism parallelism
                                   :fetch-socket fetch-socket-path]
-                        ((pkg :builder)))))
-                  (make-builder pkg build-dir fetch-socket-path parallelism)))
+                        (pkg-builder))))
+                  (make-builder (pkg :path) (pkg :builder) build-dir fetch-socket-path parallelism)))
               (spit-do-build-thunk do-build)
               (sh/$ [ "hermes-builder" "-t" thunk-path]))
             (do
@@ -577,7 +598,7 @@
               (def do-build 
                 # wrapper to minimize closure over capturing.
                 (do
-                  (defn make-builder [chroot hpkg pkg parallelism build-uid build-gid allow-network]
+                  (defn make-builder [chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-network]
                     (fn do-build []
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
@@ -593,11 +614,11 @@
                       (_hermes/setuid build-uid)
                       (_hermes/seteuid build-uid)
                       (os/cd "/build")
-                      (with-dyns [:pkg-out (pkg :path)
+                      (with-dyns [:pkg-out pkg-path
                                   :parallelism parallelism
                                   :fetch-socket "/tmp/fetch.sock"]
-                        ((pkg :builder)))))
-                  (make-builder chroot hpkg pkg parallelism (build-user :uid) (build-user :gid) allow-network)))
+                        (pkg-builder))))
+                  (make-builder chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-network)))
 
               (spit-do-build-thunk do-build)
               (sh/$ [

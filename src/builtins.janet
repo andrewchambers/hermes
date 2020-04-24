@@ -138,6 +138,7 @@
 (put hermes-env 'sh/$?  @{:value sh/$?})
 (put hermes-env 'sh/glob  @{:value sh/glob})
 (put hermes-env '*pkg-noop-build* @{:value (fn [&] nil)})
+(put hermes-env '*circular-reference* @{:value '*circular-reference*})
 (put hermes-env '_hermes/setuid @{:value _hermes/setuid})
 (put hermes-env '_hermes/setgid @{:value _hermes/setgid})
 (put hermes-env '_hermes/seteuid @{:value _hermes/seteuid})
