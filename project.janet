@@ -24,19 +24,19 @@
 
 (post-deps
 
-### Values you can change to get the build to work for your system. ##
+### User config.
 
-(def *build-static* (= (os/getenv "HERMES_BUILD_STATIC" "yes") "yes"))
-
-(def *lib-archive-lflags*
-  (->> (sh/$$_ '[pkg-config --libs libarchive])
-       (shlex/split)))
+(def *static-build* (= (os/getenv "HERMES_STATIC_BUILD" "yes") "yes"))
 
 (def *lib-archive-cflags*
-  (->> (sh/$$_ '[pkg-config --cflags libarchive])
+  (->> (sh/$$_ ~[pkg-config --cflags libarchive])
        (shlex/split)))
 
-###
+(def *lib-archive-lflags*
+  (->> (sh/$$_ ['pkg-config '--libs ;(if *static-build* ['--static] []) 'libarchive])
+       (shlex/split)))
+
+### End of user config
 
 (defn src-file?
   [path]
@@ -128,7 +128,7 @@
   :name "signify"
   :src-url "https://github.com/aperezdc/signify/releases/download/v29/signify-29.tar.xz"
   :src-sha256sum "a9c1c3c2647359a550a4a6d0fb7b13cbe00870c1b7e57a6b069992354b57ecaf"
-  :extra-make (when *build-static* ["EXTRA_LDFLAGS=--static"]))
+  :extra-make (when *static-build* ["EXTRA_LDFLAGS=--static"]))
 
 (defn declare-simple-c-prog
   [&keys {
@@ -142,11 +142,11 @@
   (def out (string "build/" name))
   (rule out src
     (sh/$ [
-      (os/getenv "CC" "gcc")
+      (or (os/getenv "CC") "gcc")
       ;extra-cflags
-      ;extra-lflags
-      ;(if *build-static* ["--static"] [])
+      ;(if *static-build* ["--static"] [])
       ;src
+      ;extra-lflags
       "-o" out
     ]))
 
@@ -190,26 +190,29 @@
            "src/unpack.c"
            "src/fts.c"]
   :cflags [;*lib-archive-cflags*]
-  :lflags [;*lib-archive-lflags* ;(if *build-static* ["-static"] [])])
+  :lflags [;*lib-archive-lflags*])
 
 
 (declare-executable
   :name "hermes"
   :entry "src/hermes-main.janet"
-  :lflags (when *build-static* ["-static"])
+  :lflags [;*lib-archive-lflags*
+           ;(if *static-build* ["-static"] [])]
   :deps all-src)
 
 (declare-executable
   :name "hermes-pkgstore"
   :entry "src/hermes-pkgstore-main.janet"
   :cflags [;*lib-archive-cflags*]
-  :lflags [;*lib-archive-lflags* ;(if *build-static* ["-static"] [])]
+  :lflags [;*lib-archive-lflags*
+           ;(if *static-build* ["-static"] [])]
   :deps all-src)
 
 (declare-executable
   :name "hermes-builder"
   :entry "src/hermes-builder-main.janet"
-  :lflags (when *build-static* ["-static"])
+  :lflags [;*lib-archive-lflags*
+           ;(if *static-build* ["-static"] [])]
   :deps all-src)
 
 (each bin ["hermes" "hermes-pkgstore" "hermes-builder"]
