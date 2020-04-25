@@ -36,7 +36,7 @@ Janet storify(int argc, Janet *argv) {
 
     const char *paths[] = {dirpath, NULL};
 
-    *pfs = fts_open((char * const *)paths, FTS_NOCHDIR|FTS_PHYSICAL, &fcompare);
+    *pfs = fts_open((char * const *)paths, FTS_NOCHDIR|FTS_PHYSICAL|FTS_XDEV, &fcompare);
     if (!*pfs)
         janet_panicf("unable to open directory");
 
