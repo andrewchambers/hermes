@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/prctl.h>
@@ -237,7 +238,6 @@ main(int argc, char *argv[])
         case 'u':
             flags |= CLONE_NEWUTS;
             break;
-            break;
         default:
             usage(argv[0]);
         }
@@ -245,11 +245,17 @@ main(int argc, char *argv[])
     if (optind >= argc)
         usage(argv[0]);
 
-    if (unshare(flags) == -1)
-        die("unshare");
 
     child_argv0 = argv[optind];
     child_argv = &argv[optind];
+
+    if (unshare(flags) == -1)
+        die("unshare");
+
+    if (flags & CLONE_NEWNS)
+      // We don't want mounts to propagate out of our container.
+      if (mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL) == -1)
+        die("mount propagatation");
 
     if ((flags & CLONE_NEWPID))
         fork_child_and_forward_signals(pid1);

@@ -192,6 +192,12 @@
   :lflags (when *build-static* ["-static"])
   :deps all-src)
 
+(each bin ["hermes" "hermes-pkgstore" "hermes-builder"]
+  (def bin (string "build/" bin))
+  (add-dep bin "build/_hermes.so")
+  (add-dep bin "build/_hermes.a")
+  (add-dep bin "build/_hermes.meta.janet"))
+
 (def output-bins
   ["hermes"
    "hermes-pkgstore"
@@ -208,7 +214,4 @@
      --files-from=-
     ]
     :redirects [[stdin (string/join output-bins "\n")]]))
-
-(add-dep "build" "build/hermes.tar.gz")
-
 )

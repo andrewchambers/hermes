@@ -658,6 +658,7 @@ fts_build(FTS *sp, int type)
 #ifdef FTS_WHITEOUT
   int oflag;
 #endif
+  (void)nostat;
   char *cp = NULL;  /* pacify gcc */
 
   _DIAGASSERT(sp != NULL);
