@@ -1,4 +1,5 @@
 (post-deps
+  (import shlex)
   (import sh)
   (import path))
 
@@ -18,6 +19,7 @@
     "https://github.com/andrewchambers/janet-process.git"
     "https://github.com/andrewchambers/janet-sh.git"
     "https://github.com/andrewchambers/janet-base16.git"
+    "https://github.com/andrewchambers/janet-shlex.git"
   ])
 
 (post-deps
@@ -28,11 +30,11 @@
 
 (def *lib-archive-lflags*
   (->> (sh/$$_ '[pkg-config --libs libarchive])
-       (string/split " ")))
+       (shlex/split)))
 
 (def *lib-archive-cflags*
   (->> (sh/$$_ '[pkg-config --cflags libarchive])
-       (string/split " ")))
+       (shlex/split)))
 
 ###
 
