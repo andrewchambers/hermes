@@ -22,7 +22,7 @@
 
 (post-deps
 
-(os/setenv "PKG_CONFIG_PATH" (string (os/cwd) "/third-party/install-root/lib/pkgconfig"))
+(def *build-static* (= (os/getenv "HERMES_BUILD_STATIC" "yes") "yes"))
 
 (defn src-file?
   [path]
@@ -37,6 +37,10 @@
   (->>  (os/dir "./src")
         (map |(string "src/" $))
         (filter src-file?)))
+
+(def all-headers
+  (filter |(string/has-suffix? ".h" $) all-src))
+
 
 (defn declare-third-party
   [&keys {:name name
@@ -107,73 +111,46 @@
   (add-dep "build" stamp-installed))
 
 (declare-third-party
-  :name "libarchive"
-  :src-url "https://www.libarchive.org/downloads/libarchive-3.4.2.tar.gz"
-  :src-sha256sum "b60d58d12632ecf1e8fad7316dc82c6b9738a35625746b47ecdcaf4aed176176"
-  :extra-configure [
-    "CFLAGS=-fPIC -O3"
-  ])
-
-(declare-third-party
-  :name "libbsd"
-  :src-url "https://libbsd.freedesktop.org/releases/libbsd-0.10.0.tar.xz"
-  :src-sha256sum "34b8adc726883d0e85b3118fa13605e179a62b31ba51f676136ecb2d0bc1a887")
-
-(declare-third-party
   :name "signify"
   :src-url "https://github.com/aperezdc/signify/releases/download/v29/signify-29.tar.xz"
   :src-sha256sum "a9c1c3c2647359a550a4a6d0fb7b13cbe00870c1b7e57a6b069992354b57ecaf"
-  :extra-make [
-    "EXTRA_LDFLAGS=--static"
-  ])
+  :extra-make (when *build-static* ["EXTRA_LDFLAGS=--static"]))
 
-(add-dep "third-party/signify/stamp_built" "third-party/libbsd/stamp_installed")
+(defn declare-simple-c-prog
+  [&keys {
+    :name name
+    :src src
+    :extra-lflags extra-lflags
+  }]
+  (default extra-lflags [])
+  (def out (string "build/" name))
+  (rule out src
+    (sh/$ [
+      (os/getenv "CC" "gcc")
+      ;extra-lflags
+      ;(if *build-static* ["--static"] [])
+      ;src
+      "-o" out
+    ]))
 
-(declare-third-party
-  :name "util-linux"
-  :src-url "https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.35/util-linux-2.35.tar.xz"
-  :src-sha256sum "b3081b560268c1ec3367e035234e91616fa7923a0afc2b1c80a2a6d8b9dfe2c9"
-  :extra-configure ~[
-    "CFLAGS=--static"
-    --disable-all-programs
-    --enable-unshare
-    --enable-static-programs=unshare
-    --disable-libblkid
-    --disable-bash-completion
-    --disable-libmount
-    --disable-libuuid
-    --disable-libsmartcols
-    --disable-libfdisk
-    --disable-makeinstall-chown
-    --disable-makeinstall-setuid
-  ])
+  (each h all-headers
+    (add-dep out h)))
 
-(declare-third-party
-  :name "dumb-init"
-  :src-url "https://github.com/Yelp/dumb-init/archive/v1.2.2.tar.gz"
-  :src-sha256sum "d4e2e10e39ad49c225e1579a4d770b83637399a0be48e29986f720fae44dafdf"
-  :do-patch
-  (fn []
-    (as-> (slurp "Makefile") _
-          (string/replace " --static " " " _)
-          (string _ ".PHONY: install\ninstall: \n\tcp dumb-init $(PREFIX)/bin/dumb-init")
-          (spit "Makefile" _))))
+(declare-simple-c-prog
+  :name "hermes-tempdir"
+  :src ["src/fts.c" "src/hermes-tempdir-main.c"])
 
-(rule "build/hermes-tempdir" ["src/hermes-tempdir-main.c"]
-  (sh/$ ~[,(os/getenv "CC" "gcc") --static "src/fts.c" src/hermes-tempdir-main.c -o build/hermes-tempdir]))
+(declare-simple-c-prog
+  :name "hermes-namespace-container"
+  :src ["src/hermes-namespace-container-main.c"])
 
-(rule "build/hermes-minitar" ["src/hermes-minitar-main.c" "third-party/libarchive/stamp_installed"]
-  (sh/$ ~[,(os/getenv "CC" "gcc") --static  src/hermes-minitar-main.c ./third-party/install-root/lib/libarchive.a -I ./third-party/install-root/include  -o build/hermes-minitar]))
+(declare-simple-c-prog
+  :name "hermes-minitar"
+  :src ["src/hermes-minitar-main.c"]
+  :extra-lflags ["-larchive"])
 
 (rule "build/hermes-signify" ["third-party/signify/stamp_installed"]
   (sh/$ ~[cp "third-party/install-root/bin/signify" "build/hermes-signify"]))
-
-(rule "build/hermes-unshare" ["third-party/util-linux/stamp_installed"]
-  (sh/$ ~[cp "third-party/install-root/bin/unshare" "build/hermes-unshare"]))
-
-(rule "build/hermes-dumb-init" ["third-party/dumb-init/stamp_installed"]
-  (sh/$ ~[cp "third-party/install-root/bin/dumb-init" "build/hermes-dumb-init"]))
-
 
 (declare-native
   :name "_hermes"
@@ -194,27 +171,25 @@
            "src/os.c"
            "src/unpack.c"
            "src/fts.c"]
-  :cflags ["-I./third-party/install-root/include"]
-  :lflags ["./third-party/install-root/lib/libarchive.a"])
+  :lflags ["-larchive" ;(if *build-static* ["-static"] [])])
 
-(add-dep "build/_hermes.so" "third-party/libarchive/stamp_installed")
 
 (declare-executable
   :name "hermes"
   :entry "src/hermes-main.janet"
-  :lflags ["-static"]
+  :lflags (when *build-static* ["-static"])
   :deps all-src)
 
 (declare-executable
   :name "hermes-pkgstore"
   :entry "src/hermes-pkgstore-main.janet"
-  :lflags ["-static"]
+  :lflags (when *build-static* ["-static"])
   :deps all-src)
 
 (declare-executable
   :name "hermes-builder"
   :entry "src/hermes-builder-main.janet"
-  :lflags ["-static"]
+  :lflags (when *build-static* ["-static"])
   :deps all-src)
 
 (def output-bins
@@ -224,15 +199,16 @@
    "hermes-tempdir"
    "hermes-signify"
    "hermes-minitar"
-   "hermes-unshare"
-   "hermes-dumb-init"])
+   "hermes-namespace-container"])
 
 (rule "build/hermes.tar.gz" (map |(string "build/" $) output-bins)
-  (sh/$
-   ~[tar -C ./build -czf build/hermes.tar.gz --files-from=-]
+  (sh/$ ~[
+     tar -C ./build
+     -czf build/hermes.tar.gz
+     --files-from=-
+    ]
     :redirects [[stdin (string/join output-bins "\n")]]))
 
 (add-dep "build" "build/hermes.tar.gz")
-
 
 )
