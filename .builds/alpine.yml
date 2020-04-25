@@ -1,0 +1,33 @@
+image: alpine/latest
+packages:
+  - libbsd-dev
+  - libarchive-dev
+  - libarchive-static
+  - zlib-dev
+  - zlib-static
+  - bzip2-dev
+  - bzip2-static
+  - xz-dev
+  - lz4-dev
+  - lz4-static
+  - acl-dev
+  - acl-static
+  - openssl-dev
+  - openssl-libs-static
+  - expat-dev
+  - expat-static
+  - zstd-dev
+  - zstd-static
+sources:
+  - https://github.com/janet-lang/janet
+  - https://github.com/andrewchambers/hermes
+tasks:
+  - build: |
+      export PATH=/tmp/janet/bin:$PATH
+      cd janet
+      make PREFIX=/tmp/janet
+      make install PREFIX=/tmp/janet
+      cd ../hermes
+      jpm load-lockfile
+      jpm --verbose build
+      jpm --verbose run build/hermes.tar.gz
