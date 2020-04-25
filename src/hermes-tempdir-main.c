@@ -9,7 +9,13 @@
 #include <signal.h>
 #include "fts.h"
 
-void cleanup(const char *dir)
+
+static void die(const char *msg) {
+    perror(msg);
+    exit(1);
+}
+
+static void cleanup(const char *dir)
 {
     FTS *ftsp = NULL;
     FTSENT *curr;
@@ -53,6 +59,8 @@ finish:
         fts_close(ftsp);
 }
 
+
+
 static volatile sig_atomic_t interrupted = 0;
 
 static void sighandler(int signo, siginfo_t *siginfo, void *context) {
@@ -77,19 +85,18 @@ int main()
         || (sigaction(SIGPIPE, &act, NULL) < 0)
         || (sigaction(SIGTERM, &act, NULL) < 0)
         || (sigaction(SIGALRM, &act, NULL) < 0)) {
-        perror ("sigaction");
+        die("sigaction");
     }
 
     char template[] = "/tmp/hermes-tmpdir.XXXXXX";
     char *dir_name = mkdtemp(template);
     if (!dir_name) {
-        perror("mkdtemp");
-        exit(1);
+        die("mkdtemp");
     }
     if (printf("%s\n", dir_name) < 0)
-        exit(1);
+        die("printf");
     if (fflush(stdout) != 0)
-        exit(1);
+        die("fflush");
     char buf[1];
     while (!interrupted) {
         // alarm ensures cleanup happens
