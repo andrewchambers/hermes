@@ -22,7 +22,19 @@
 
 (post-deps
 
+### Values you can change to get the build to work for your system. ##
+
 (def *build-static* (= (os/getenv "HERMES_BUILD_STATIC" "yes") "yes"))
+
+(def *lib-archive-lflags*
+  (->> (sh/$$_ '[pkg-config --libs libarchive])
+       (string/split " ")))
+
+(def *lib-archive-cflags*
+  (->> (sh/$$_ '[pkg-config --cflags libarchive])
+       (string/split " ")))
+
+###
 
 (defn src-file?
   [path]
@@ -120,13 +132,16 @@
   [&keys {
     :name name
     :src src
+    :extra-cflags extra-cflags
     :extra-lflags extra-lflags
   }]
+  (default extra-cflags [])
   (default extra-lflags [])
   (def out (string "build/" name))
   (rule out src
     (sh/$ [
       (os/getenv "CC" "gcc")
+      ;extra-cflags
       ;extra-lflags
       ;(if *build-static* ["--static"] [])
       ;src
@@ -147,7 +162,8 @@
 (declare-simple-c-prog
   :name "hermes-minitar"
   :src ["src/hermes-minitar-main.c"]
-  :extra-lflags ["-larchive"])
+  :extra-cflags *lib-archive-cflags*
+  :extra-lflags *lib-archive-lflags*)
 
 (rule "build/hermes-signify" ["third-party/signify/stamp_installed"]
   (sh/$ ~[cp "third-party/install-root/bin/signify" "build/hermes-signify"]))
@@ -171,7 +187,8 @@
            "src/os.c"
            "src/unpack.c"
            "src/fts.c"]
-  :lflags ["-larchive" ;(if *build-static* ["-static"] [])])
+  :cflags [;*lib-archive-cflags*]
+  :lflags [;*lib-archive-lflags* ;(if *build-static* ["-static"] [])])
 
 
 (declare-executable
@@ -183,7 +200,8 @@
 (declare-executable
   :name "hermes-pkgstore"
   :entry "src/hermes-pkgstore-main.janet"
-  :lflags (when *build-static* ["-static"])
+  :cflags [;*lib-archive-cflags*]
+  :lflags [;*lib-archive-lflags* ;(if *build-static* ["-static"] [])]
   :deps all-src)
 
 (declare-executable
