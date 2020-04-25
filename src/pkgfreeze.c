@@ -228,7 +228,7 @@ static void hash_one_abstract(HashState *st, Janet x, int flags) {
         // after package construction.
         hash_one(st, pkg->hash, flags + 1);
     }  else if (at == &janet_peg_type) {
-        JanetPeg *peg = abstract;
+        // JanetPeg *peg = abstract;
         janet_panicf("TODO hash PEG");
     } else {
         janet_panicf("unable to hash %v", x);

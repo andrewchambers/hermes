@@ -29,6 +29,8 @@
  * SUCH DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200809L 
+
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)fts.c 8.6 (Berkeley) 8/14/94";
@@ -544,7 +546,7 @@ name:   t = sp->fts_path + NAPPEND(p->fts_parent);
 int
 fts_set(FTS *sp, FTSENT *p, int instr)
 {
-
+  (void)sp;
   _DIAGASSERT(sp != NULL);
   _DIAGASSERT(p != NULL);
 

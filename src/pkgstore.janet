@@ -606,7 +606,7 @@
                       (_hermes/mount "proc" (string chroot "/proc") "proc" 0)
                       (_hermes/mount "/dev" (string chroot "/dev") "" _hermes/MS_BIND)
                       (_hermes/mount hpkg (string chroot hpkg) "" (bor _hermes/MS_BIND _hermes/MS_RDONLY))
-                      (_hermes/mount (pkg :path) (string chroot (pkg :path)) "" _hermes/MS_BIND)
+                      (_hermes/mount pkg-path (string chroot pkg-path) "" _hermes/MS_BIND)
                       (_hermes/mount fetch-socket-path (string chroot "/tmp/fetch.sock") "" _hermes/MS_BIND)
                       (_hermes/chroot chroot)
                       (_hermes/setegid build-gid)
@@ -622,13 +622,11 @@
 
               (spit-do-build-thunk do-build)
               (sh/$ [
-                "hermes-unshare" "--fork" "-m" "-u" "-p" 
+                "hermes-namespace-container" "-u" "-m" "-u" "-p" 
                  ;(if allow-network
                    []
                    ["-n"])
                 "--" 
-                "hermes-dumb-init" "--single-child"
-                "--"
                 "hermes-builder" "-t" thunk-path]))))
 
         # Ensure files have correct owner, clear any permissions except execute.
