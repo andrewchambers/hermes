@@ -214,7 +214,7 @@
    "expression"
      {:kind :option
       :short "e"
-      :help "Expression to build."}
+      :help "Expression to build, defaults to the hpkg filen name."}
    "output" 
      {:kind :option
       :short "o"
@@ -233,13 +233,23 @@
       :short "n"
       :help "Do not create an output link."}])
 
+(defn- default-expression-from-module
+  [mod]
+  (def basename (last (string/split "/" mod)))
+  (def basename-parts (string/split "." basename))
+  (if (= 1 (length basename-parts))
+    basename
+    (string/slice basename 0 (- -2 (length (last basename-parts))))))
+
 (defn- build
   []
   (def parsed-args (argparse/argparse ;build-params))
   (unless parsed-args
     (os/exit 1))
   
-  (def pkg (load-pkgs (get parsed-args "expression" "default-pkg")  (parsed-args "module")))
+  (def module (parsed-args "module"))
+  (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
+  (def pkg (load-pkgs expr module))
 
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "expression did not return a valid package, got %v" pkg)))
@@ -461,7 +471,9 @@
   (unless parsed-args
     (os/exit 1))
   
-  (var pkg (load-pkgs (get parsed-args "expression" "default-pkg")  (parsed-args "module")))
+  (def module (parsed-args "module"))
+  (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
+  (var pkg (load-pkgs expr module))
 
   (unless (= (type pkg) :hermes/pkg)
     (error (string/format "expression did not return a valid package, got %v" pkg)))

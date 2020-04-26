@@ -24,9 +24,9 @@
 
 (post-deps
 
-### User config.
+### User config
 
-(def *static-build* (= (os/getenv "HERMES_STATIC_BUILD" "yes") "yes"))
+(def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "yes") "yes"))
 
 (def *lib-archive-cflags*
   (->> (sh/$$_ ~[pkg-config --cflags libarchive])
@@ -237,4 +237,6 @@
      --files-from=-
     ]
     :redirects [[stdin (string/join output-bins "\n")]]))
+
+(add-dep "build" "build/hermes.tar.gz")
 )

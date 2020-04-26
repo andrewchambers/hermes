@@ -132,6 +132,7 @@
 (put hermes-env 'local-file  @{:value local-file :macro true})
 (put hermes-env 'local-file* @{:value local-file*})
 (put hermes-env 'unpack @{:value unpack})
+(put hermes-env 'sh/run @{:value sh/run})
 (put hermes-env 'sh/$   @{:value sh/$})
 (put hermes-env 'sh/$$  @{:value sh/$$})
 (put hermes-env 'sh/$$_ @{:value sh/$$_})
