@@ -1,21 +1,92 @@
-(import https://raw.githubusercontent.com/andrewchambers/hpkgs/49aa40b0776789c1741124bb4ebd35c52c23e7f5/core)
+(import https://raw.githubusercontent.com/andrewchambers/hpkgs/a29fae13332c2d03edc3e2a1c78be57d7322ae8a/core)
 
-(def janet-src
-  (fetch
-    :url "https://github.com/janet-lang/janet/tarball/63812c9f80e80664d3dd334a148283e1dcfeea4f"
-    :file-name "janet.tar.gz"
-    :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749"))
+(core/defpkg zlib
+  :src-url "https://www.zlib.net/zlib-1.2.11.tar.gz"
+  :src-hash "sha256:c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1")
+
+(core/defpkg xz
+  :src-url "https://tukaani.org/xz/xz-5.2.5.tar.gz"
+  :src-hash "sha256:f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10")
+
+(core/defpkg lz4
+  :src-url "https://github.com/lz4/lz4/archive/v1.9.2.tar.gz"
+  :src-hash "sha256:658ba6191fa44c92280d4aa2c271b0f4fbc0e34d249578dd05e50e76d0e5efcc")
+
+(core/defpkg libbsd
+  :src-url "https://libbsd.freedesktop.org/releases/libbsd-0.10.0.tar.xz"
+  :src-hash "sha256:34b8adc726883d0e85b3118fa13605e179a62b31ba51f676136ecb2d0bc1a887")
+
+(def bzip2
+  (core/std-pkg
+    :name "bzip2"
+    :src 
+      (fetch
+        :url "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+        :hash "sha256:ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269")
+    :configure-phase
+      (fn []
+        (->> (slurp "Makefile")
+             (string/replace "SHELL=/bin/sh" "SHELL=sh")
+             (spit "Makefile")))
+    :install-phase
+      (fn []
+        (def make-args [
+          (string "-j" (dyn :parallelism))
+          (string "CFLAGS=-fPIC -O2")
+          (string "PREFIX=" (dyn :pkg-out))
+        ])
+        (sh/$ ["make"  ;make-args])
+        (sh/$ ["make" "install" ;make-args]))))
+
+(core/defpkg libarchive
+  :src-url "https://github.com/libarchive/libarchive/releases/download/v3.4.2/libarchive-3.4.2.tar.gz"
+  :src-hash "sha256:b60d58d12632ecf1e8fad7316dc82c6b9738a35625746b47ecdcaf4aed176176"
+  :configure-phase
+    (fn []
+      (def libs [zlib xz bzip2 lz4])
+      (os/setenv "PKG_CONFIG_PATH" (string/join (map |(string ($ :path) "/lib/pkgconfig") libs) ":"))
+      (os/setenv "CFLAGS"
+        (string
+          "-O2"
+          " " (string "-I" (bzip2 :path) "/include")
+          " " (sh/$$_ '[pkg-config --cflags zlib liblzma liblz4])))
+      (os/setenv "LDFLAGS"
+        (string
+          (string/join (map |(string "-Wl,-rpath=" ($ :path) "/lib") libs) " ")
+          " -L" (bzip2 :path) "/lib"
+          " " (sh/$$_ '[pkg-config --libs zlib liblzma liblz4])))
+      (sh/$ ["./configure" "--prefix" (dyn :pkg-out)]))
+  :post-install-phase
+    (fn []
+      (def libs [zlib xz bzip2 lz4])
+      (def out-libpath (string (dyn :pkg-out) "/lib"))
+      (def extra-rpaths (tuple ;(map |(string ($ :path) "/lib") libs) out-libpath))
+
+      (def extra-libsearch-flags (string/join (map |(string "-L" ($ :path) "/lib") libs) " "))
+      (def extra-rpath-flags (string/join (map |(string "-Wl,-rpath=" $) extra-rpaths) " "))
+
+      (def pc (string (dyn :pkg-out) "/lib/pkgconfig/libarchive.pc"))
+      (->>
+        (slurp pc)
+        (string/replace "Libs:" (string "Libs: " extra-libsearch-flags " " extra-rpath-flags))
+        (spit pc))))
 
 (def janet
   (core/std-pkg
     :name "janet"
-    :src janet-src
-    :bin-inputs [core/core-build-env]))
+    :src  
+      (fetch
+        :url "https://github.com/janet-lang/janet/tarball/63812c9f80e80664d3dd334a148283e1dcfeea4f"
+        :file-name "janet.tar.gz"
+        :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749")))
 
 (def dev-env
   (core/make-combined-env
     :bin-pkgs [core/core-build-env janet]
+    :lib-pkgs [xz zlib libarchive bzip2 libbsd lz4]
     :post-build 
       |(do
-        (os/cd (string (dyn :pkg-out) "/bin"))
-        (os/symlink "./pkgconf" "./pkg-config"))))
+        (spit (string (dyn :pkg-out) "/activate")
+          (string
+            "export PATH=" (dyn :pkg-out) "/bin\n"
+            "export PKG_CONFIG_PATH=" (dyn :pkg-out) "/lib/pkgconfig\n")))))

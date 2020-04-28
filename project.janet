@@ -28,15 +28,15 @@
 
 (def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "yes") "yes"))
 
+### End of user config
+
 (def *lib-archive-cflags*
-  (->> (sh/$$_ ~[pkg-config --cflags libarchive])
-       (shlex/split)))
+  (shlex/split
+    (sh/$$_ ~[pkg-config --cflags ,;(if *static-build* ['--static] []) libarchive])))
 
 (def *lib-archive-lflags*
-  (->> (sh/$$_ ['pkg-config '--libs ;(if *static-build* ['--static] []) 'libarchive])
-       (shlex/split)))
-
-### End of user config
+  (shlex/split
+    (sh/$$_ ~[pkg-config --libs ,;(if *static-build* ['--static] []) libarchive])))
 
 (defn src-file?
   [path]
