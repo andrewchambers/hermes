@@ -8,6 +8,7 @@
 (import ./pkgstore)
 (import ./fetch)
 (import ./hash)
+(import ./version)
 (import ./builtins)
 (import ../build/_hermes)
 
@@ -517,5 +518,6 @@
       [_ "gc"] (gc)
       [_ "cp"] (cp)
       [_ "show-build-deps"] (show-build-deps)
+      [_ "version"] (print version/version)
       _ (unknown-command)))
   nil)

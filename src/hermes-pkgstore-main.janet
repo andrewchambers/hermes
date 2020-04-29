@@ -2,7 +2,9 @@
 (import path)
 (import ./pkgstore)
 (import ./builtins)
+(import ./version)
 (import ../build/_hermes)
+
 
 (defn die [& args]
   (eprint (string ;args))
@@ -117,15 +119,15 @@
         # We must make the fetch socket
         # readable by any user so that build users
         # can connect.
-        # protected by being in a private directory.
-        # We should investigate other ways to do
-        # this if possible.
+        # It is protected by being in a private directory.
+        # We could investigate other ways to do
+        # this if possible. PEER_CRED?
         (os/chmod fetch-socket-path 8r777)
         nil)
       (do
         # If the socket is coming via ssh, its not easy to
         # tell when it will be ready. We can wait for it to simplify.
-        (def wait-for 0.2)
+        (def wait-for 0.03)
         (os/sleep wait-for)
         (configure-fetch-socket (- nleft wait-for))))))
 
@@ -228,6 +230,7 @@
 
 (defn sanitize-env
   []
+  # Wipe PATH so that setuid installs programs are not influenced.
   (eachk k (os/environ)
     (os/setenv k nil))
   (def bin (os/realpath "/proc/self/exe"))
@@ -246,5 +249,6 @@
       [_ "gc"] (gc)
       [_ "send"] (send)
       [_ "recv"] (recv)
+      [_ "version"] (print version/version)
       _ (unknown-command)))
   nil)

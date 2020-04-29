@@ -1,4 +1,4 @@
-(import https://raw.githubusercontent.com/andrewchambers/hpkgs/a29fae13332c2d03edc3e2a1c78be57d7322ae8a/core)
+(import https://raw.githubusercontent.com/andrewchambers/hpkgs/c2ca91b20de5b5d02c31174b0c760ddf4dfa331e/core)
 
 (core/defpkg zlib
   :src-url "https://www.zlib.net/zlib-1.2.11.tar.gz"
@@ -78,7 +78,22 @@
       (fetch
         :url "https://github.com/janet-lang/janet/tarball/63812c9f80e80664d3dd334a148283e1dcfeea4f"
         :file-name "janet.tar.gz"
-        :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749")))
+        :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749")
+    :configure-phase
+      (fn []
+        (->>
+          (slurp "Makefile")
+          (string/replace "CFLAGS:=" "CFLAGS:= -flto ")
+          (string/replace "LDFLAGS:=" "LDFLAGS:= -flto ")
+          (spit "Makefile"))
+
+        (def janetconf "src/conf/janetconf.h")
+        (as-> (slurp janetconf) _
+              (string/split "\n" _)
+              (array/insert _ -3 
+                "#define JANET_NO_PRF 1")
+              (string/join _ "\n")
+              (spit janetconf _)))))
 
 (def dev-env
   (core/make-combined-env
