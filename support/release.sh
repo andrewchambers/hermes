@@ -19,12 +19,11 @@ export HERMES_BUILD_VERISON="$(janet -e '(use ./src/version) (print version)')"
 export HERMES_STATIC_BUILD=yes
 sh ./support/dev-shell.sh -c "jpm load-lockfile lockfile.jdn && jpm build"
 
-bootstrap="$(mktemp -d)"
-mkdir "$bootstrap/bin"
+bootstrap="$(pwd)/bootstrap"
+mkdir -p "$bootstrap/bin"
 tar -C "$bootstrap/bin" -xf ./build/hermes.tar.gz
 export PATH="$bootstrap/bin/bin:$PATH"
 export HERMES_STORE="$bootstrap/store"
-
 
 rm -rf ./build
 rm -rf ./third-party
