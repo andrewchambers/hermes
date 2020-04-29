@@ -16,8 +16,7 @@ set -x
 
 # Set this so we don't get -dirty.
 export HERMES_BUILD_VERISON="$(janet -e '(use ./src/version) (print version)')"
-export HERMES_STATIC_BUILD=yes
-sh ./support/dev-shell.sh -c "jpm load-lockfile lockfile.jdn && jpm build"
+jpm build
 
 bootstrap="$(pwd)/bootstrap"
 mkdir -p "$bootstrap/bin"
@@ -26,11 +25,13 @@ export PATH="$bootstrap/bin/bin:$PATH"
 export HERMES_STORE="$bootstrap/store"
 
 rm -rf ./build
-rm -rf ./third-party
 rm -rf ./janet_modules
 
 hermes init
+export HERMES_STATIC_BUILD=yes
 sh ./support/dev-shell.sh -c "jpm load-lockfile lockfile.jdn && jpm build"
+rm ./dev-env
+hermes gc
 
 mkdir release
 cp ./build/hermes.tar.gz ./release/hermes-$HERMES_BUILD_VERISON-linux-x64_64.tar.gz

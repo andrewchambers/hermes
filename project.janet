@@ -26,7 +26,7 @@
 
 ### User config
 
-(def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "yes") "yes"))
+(def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "yes") "no"))
 
 ### End of user config
 
