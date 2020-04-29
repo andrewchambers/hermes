@@ -47,88 +47,27 @@
     ".h" true
     false))
 
-(def all-src
+(def hermes-src
   (->>  (os/dir "./src")
         (map |(string "src/" $))
         (filter src-file?)))
 
-(def all-headers
-  (filter |(string/has-suffix? ".h" $) all-src))
+(def hermes-headers
+  (filter |(string/has-suffix? ".h" $) hermes-src))
 
+(def signify-src
+  (->>  (os/dir "./third-party/signify")
+        (map |(string "./third-party/signify/" $))
+        (filter src-file?)))
 
-(defn declare-third-party
-  [&keys {:name name
-          :src-url src-url
-          :src-sha256sum src-sha256sum
-          :extract-nstrip extract-nstrip
-          :extra-configure extra-configure
-          :extra-make extra-make
-          :do-patch do-patch}]
-  
-  (default extract-nstrip 1)
-  (default extra-configure [])
-  (default extra-make [])
-  (def dir (string "third-party/"  name))
-  (def install-root (path/abspath "third-party/install-root"))
-  (def src (string dir "/src"))
-  (def archive (string dir "/" (last (string/split "/" src-url))))
-  (def stamp-downloaded (string dir "/stamp_downloaded"))
-  (def stamp-extracted (string dir "/stamp_extracted"))
-  (def stamp-patched (string dir "/stamp_patched"))
-  (def stamp-built (string dir "/stamp_built"))
-  (def stamp-installed (string dir "/stamp_installed"))
-  
-  (rule stamp-downloaded []
-    (eprint "downloading " src-url " to " archive)
-    (sh/$ ~[mkdir -p ,dir])
-    (sh/$ ~[curl -f -L -o ,archive ,src-url])
-    (def hash (first (string/split " " (sh/$$_ ~[sha256sum ,archive]))))
-    (unless (= hash src-sha256sum)
-      (error (string "checksum of " archive " failed, expected " src-sha256sum " got " hash)))
-    (sh/$ ~[touch ,stamp-downloaded]))
-
-  (rule stamp-extracted [stamp-downloaded]
-    (eprint "extracting " archive " to " src)
-    (sh/$ ~[rm -rf ,src])
-    (sh/$ ~[mkdir ,src])
-    (sh/$ ~[tar -C ,src -vxaf ,(path/abspath archive) ,(string "--strip-components=" extract-nstrip)])
-    (sh/$ ~[touch ,stamp-extracted]))
-
-  (rule stamp-patched [stamp-extracted]
-    (when do-patch
-      (eprint "patching " name)
-      (def wd (os/cwd))
-      (defer (os/cd wd)
-        (os/cd src)
-        (do-patch)))
-    (sh/$ ~[touch ,stamp-patched]))
-  
-  (rule stamp-built [stamp-patched]
-    (eprint "building " name)
-    (def wd (os/cwd))
-    (defer (os/cd wd)
-      (os/cd src)
-      (when (os/stat "./configure")
-        (sh/$ ~[./configure ,(string "--prefix=" install-root) ,;extra-configure]))
-      (sh/$ ["make" (string "PREFIX=" install-root) ;extra-make]))
-    (sh/$ ~[touch ,stamp-built]))
-
-  (rule stamp-installed [stamp-built]
-    (eprint "installing " name)
-    (sh/$ ~[mkdir -p ,install-root])
-    (def wd (os/cwd))
-    (defer (os/cd wd)
-      (os/cd src)
-      (sh/$ ~[make ,(string "PREFIX=" install-root) ,;extra-make install]))
-    (sh/$ ~[touch ,stamp-installed]))
-
-  (add-dep "build" stamp-installed))
-
-(declare-third-party
-  :name "signify"
-  :src-url "https://github.com/aperezdc/signify/releases/download/v29/signify-29.tar.xz"
-  :src-sha256sum "a9c1c3c2647359a550a4a6d0fb7b13cbe00870c1b7e57a6b069992354b57ecaf"
-  :extra-make (when *static-build* ["EXTRA_LDFLAGS=--static"]))
+(rule "build/hermes-signify" signify-src
+  (eprint "building signify")
+  (def wd (os/cwd))
+  (defer (os/cd wd)
+    (os/cd "./third-party/signify")
+    (sh/$ ["make" "clean"])
+    (sh/$ ["make" ;(if *static-build* ["EXTRA_LDFLAGS=--static"] [])])
+    (sh/$ ["cp" "-v" "signify" "../../build/hermes-signify"])))
 
 (defn declare-simple-c-prog
   [&keys {
@@ -150,7 +89,7 @@
       "-o" out
     ]))
 
-  (each h all-headers
+  (each h hermes-headers
     (add-dep out h)))
 
 (declare-simple-c-prog
@@ -166,9 +105,6 @@
   :src ["src/hermes-minitar-main.c"]
   :extra-cflags *lib-archive-cflags*
   :extra-lflags *lib-archive-lflags*)
-
-(rule "build/hermes-signify" ["third-party/signify/stamp_installed"]
-  (sh/$ ~[cp "third-party/install-root/bin/signify" "build/hermes-signify"]))
 
 (declare-native
   :name "_hermes"
@@ -198,7 +134,7 @@
   :entry "src/hermes-main.janet"
   :lflags [;*lib-archive-lflags*
            ;(if *static-build* ["-static"] [])]
-  :deps all-src)
+  :deps hermes-src)
 
 (declare-executable
   :name "hermes-pkgstore"
@@ -206,14 +142,14 @@
   :cflags [;*lib-archive-cflags*]
   :lflags [;*lib-archive-lflags*
            ;(if *static-build* ["-static"] [])]
-  :deps all-src)
+  :deps hermes-src)
 
 (declare-executable
   :name "hermes-builder"
   :entry "src/hermes-builder-main.janet"
   :lflags [;*lib-archive-lflags*
            ;(if *static-build* ["-static"] [])]
-  :deps all-src)
+  :deps hermes-src)
 
 (each bin ["hermes" "hermes-pkgstore" "hermes-builder"]
   (def bin (string "build/" bin))

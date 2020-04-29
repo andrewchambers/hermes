@@ -1,0 +1,3 @@
+[submodule "third-party/signify"]
+	path = third-party/signify
+	url = https://github.com/aperezdc/signify
