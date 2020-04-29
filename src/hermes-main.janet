@@ -215,7 +215,7 @@
    "expression"
      {:kind :option
       :short "e"
-      :help "Expression to build, defaults to the hpkg filen name."}
+      :help "Expression to build, defaults to the hpkg file name."}
    "output" 
      {:kind :option
       :short "o"
@@ -380,7 +380,7 @@
    "to-store"
     {:kind :option
      :short "t"
-     :help "The store copy into."}
+     :help "The store to copy into."}
    :default {:kind :accumulate}])
 
 (defn- cp
