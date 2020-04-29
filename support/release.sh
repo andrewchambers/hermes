@@ -9,7 +9,7 @@ fi
 if ! test -d  ./.git
 then
   echo "run release script from project directory."
-   exit 1
+  exit 1
 fi
 
 set -x
