@@ -98,7 +98,7 @@
   (def pkg (unmarshal (slurp (parsed-args "package")) builtins/load-registry))
 
   (unless (= (type pkg) :hermes/pkg)
-    (error (string/format "pkg did did not return a valid package, got %v" pkg)))
+    (error (string/format "pkg did not return a valid package, got %v" pkg)))
 
   (def parallelism (or (scan-number (parsed-args "parallelism"))
                        (error "expected a number for --parallelism")))
