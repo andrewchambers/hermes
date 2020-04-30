@@ -13,32 +13,11 @@ you are interested in diving into using Hermes.
 
 ## Installing Hermes
 
-Installing from source:
-
-- Ensure you have latest janet from git, pkg-config, curl, and a musl libc gcc toolchain installed.
-
-```
-$ git clone https://github.com/andrewchambers/hermes
-$ cd hermes
-$ jpm load-lockfile lockfile.jdn
-$ jpm build
-```
-
-Once hermes and it's support programs are built, extract them to your PATH:
-
-```
-$ cd /home/me/bin
-$ tar -xvzf $HERMES_SRC/build/hermes.tar.gz
-```
-
-## Installing precompiled Hermes
-
-Coming soon...
+[see the installation guide](../installing.md).
 
 ## Initializing Hermes
 
-Once hermes is installed and on your path:
-
+Once hermes is installed and on your path you can initialize a package store:
 
 ```
 $ export HERMES_STORE=/tmp/hermes-store
@@ -320,65 +299,15 @@ How to define such package abstractions is beyond the scope of the quickstart, b
 packages if someone else has defined suitable functions for you to use.
 
 
-## Multi user install
+## Multi user mode
 
 Until now, you have been user a private package store that only your
-user can access. Hermes also supports a shared global package store.
+user can access. Hermes also supports a shared global package store, that allows 
+all users on the same system share a package store securely.
 
-To use hermes in this mode requires slightly more configuration.
+Usage in multi user mode is the same, but packages are installed into /hpkg instead of your HERMES_STORE.
 
-First install hermes as root:
-
-```
-$ cd /usr/bin/
-$ sudo tar -xvzf $HERMES_SRC/build/hermes.tar.gz
-$ sudo chmod u+s,g+s hermes-pkgstore
-```
-Note, for a true multi-user install, we must install the pkgstore binary as setuid (The chmod command).
-This lets less privileged users install packages into /hpkg securely.
-
-
-Now we can initialize the global package store:
-
-```
-$ unset HERMES_STORE
-$ sudo hermes init
-```
-
-Now that hermes is initialized, globally, we can check our store config:
-
-```
-$ sudo cat /etc/hermes/cfg.jdn
-{
-  :mode :multi-user
-  :authorized-group "wheel"
-  :sandbox-build-users [
-    "hermes_build_user0"
-    ...
-  ]
-}
-```
-
-
-Ensure your user is in the authorized group, as hermes will refuse to allow users not 
-in this group to build packages.
-
-When a package is built, hermes will perform the package build on your behalf inside a [chroot](https://en.wikipedia.org/wiki/Chroot) and
-[sandbox](https://en.wikipedia.org/wiki/Sandbox_(computer_security)). 
-
-You will also need to create user accounts for the sandbox build users,
-how to do so varies system by system, but for many users this will be sufficient:
-
-```
-$ for i in `seq 0 9`
-do
-  sudo useradd --system --no-create-home --home /homeless hermes_build_user$i
-done
-```
-
-## Configuring a cache server
-
-TODO...
+To enable multi user mode, unset HERMES_STORE and follow the instructions in [installation guide](../installing.md).
 
 ## Transparent remote builds
 
@@ -439,4 +368,4 @@ If the network connection breaks, the existing package will not be changed. The 
 
 ## Uninstalling hermes
 
-[see here](../uninstalling-hermes.md).
+[see here](../uninstalling.md).
