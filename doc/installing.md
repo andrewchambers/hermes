@@ -16,7 +16,7 @@ Ensure you have a C compiler, latest janet from git, pkg-config, libbsd and liba
 Clone the source code using Git.
 
 ```
-$ git clone https://github.com/andrewchambers/hermes
+$ git clone --recurse-submodules https://github.com/andrewchambers/hermes
 $ cd hermes
 ```
 
@@ -55,11 +55,11 @@ $ jpm load-lockfile lockfile.jdn
 $ jpm build
 ```
 
+This is useful as it ensures you have exactly the same build environment as are used for releases.
+
 ## Multi user install
 
- Hermes also supports a shared global package store.
-
-To use hermes in this mode requires slightly more configuration.
+Hermes also supports a shared system package store, though to use hermes in this mode requires slightly more configuration.
 
 First install hermes as root:
 

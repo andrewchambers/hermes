@@ -13,7 +13,7 @@ you are interested in diving into using Hermes.
 
 ## Installing Hermes
 
-[see the installation guide](../installing.md).
+See the [installation guide](../installing.md).
 
 ## Initializing Hermes
 
