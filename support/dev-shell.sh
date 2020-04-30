@@ -7,4 +7,5 @@ export JANET_LIBPATH="$(realpath $(dirname $(realpath ./dev-env/bin/janet))/../l
 export ORIG_PATH=$PATH
 . ./dev-env/activate
 export PATH=$PATH:$ORIG_PATH
+export HERMES_STATIC_BUILD=yes
 exec /bin/sh --norc --noprofile "$@"

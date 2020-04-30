@@ -26,7 +26,7 @@
 
 ### User config
 
-(def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "yes") "no"))
+(def *static-build* (= (or (os/getenv "HERMES_STATIC_BUILD") "no") "yes"))
 
 ### End of user config
 
@@ -65,7 +65,6 @@
   (def wd (os/cwd))
   (defer (os/cd wd)
     (os/cd "./third-party/signify")
-    (sh/$ ["make" "clean"])
     (sh/$ ["make" ;(if *static-build* ["EXTRA_LDFLAGS=--static"] [])])
     (sh/$ ["cp" "-v" "signify" "../../build/hermes-signify"])))
 
@@ -140,15 +139,15 @@
   :name "hermes-pkgstore"
   :entry "src/hermes-pkgstore-main.janet"
   :cflags [;*lib-archive-cflags*]
-  :lflags [;*lib-archive-lflags*
-           ;(if *static-build* ["-static"] [])]
+  :lflags [;(if *static-build* ["-static"] [])
+           ;*lib-archive-lflags*]
   :deps hermes-src)
 
 (declare-executable
   :name "hermes-builder"
   :entry "src/hermes-builder-main.janet"
-  :lflags [;*lib-archive-lflags*
-           ;(if *static-build* ["-static"] [])]
+  :lflags [;(if *static-build* ["-static"] [])
+           ;*lib-archive-lflags*]
   :deps hermes-src)
 
 (each bin ["hermes" "hermes-pkgstore" "hermes-builder"]
@@ -175,4 +174,14 @@
     :redirects [[stdin (string/join output-bins "\n")]]))
 
 (add-dep "build" "build/hermes.tar.gz")
+
+(phony "clean-third-party" []
+  (def wd (os/cwd))
+  (defer (os/cd wd)
+    (os/cd "./third-party/signify")
+    (sh/$ ["make" "clean"] :redirects [[stdout :null]])))
+
+
+(add-dep "clean" "clean-third-party")
+
 )

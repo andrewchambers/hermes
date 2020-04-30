@@ -85,15 +85,7 @@
           (slurp "Makefile")
           (string/replace "CFLAGS:=" "CFLAGS:= -flto ")
           (string/replace "LDFLAGS:=" "LDFLAGS:= -flto ")
-          (spit "Makefile"))
-
-        (def janetconf "src/conf/janetconf.h")
-        (as-> (slurp janetconf) _
-              (string/split "\n" _)
-              (array/insert _ -3 
-                "#define JANET_NO_PRF 1")
-              (string/join _ "\n")
-              (spit janetconf _)))))
+          (spit "Makefile")))))
 
 (def dev-env
   (core/make-combined-env
