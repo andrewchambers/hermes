@@ -40,7 +40,7 @@ which are linked below.
 * hermes-init(1) - Initialize a package store.
 * hermes-build(1) - Install or build a package from a given package path or url.
 * hermes-gc(1) - Remove packages that are no longer in use.
-* hermes-cp(1) - Copy packages between local or remote package stores over ssh(1).
+* hermes-cp(1) - Copy packages between local or remote package stores.
 
 ## AUXILLARY SUBCOMMANDS
 
@@ -49,7 +49,7 @@ which are linked below.
 ## ENVIRONMENT
 
   * `HERMES_STORE`:
-    The path to the package store commands are run against. If unset a root owned package store
+    The path to the package store commands are run against. If unset a root owned, multi user package store
     is assumed.
 
 ## SEE ALSO
