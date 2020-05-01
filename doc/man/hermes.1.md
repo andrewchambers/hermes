@@ -1,4 +1,4 @@
-hermes(1) -- Software Environment Manager
+hermes(1) - Software Environment Manager
 =========================================
 
 ## SYNOPSIS

@@ -1,5 +1,5 @@
-hermes-package-store(7) -- Hermes package store contents.
-=========================================================
+hermes-package-store(7) - Hermes package store
+===============================================
 
 ## SYNOPSIS
 
@@ -24,17 +24,17 @@ A hermes package store directory tree after initialization, rooted at `HERMES_ST
 ## DESCRIPTION
 
 Hermes maintains a database of packages which we refer to as a package store, this manual page describes all aspects of the package store for your reference.
-In general, a user will not need to manually edit the contents of the repository, instead letting hermes maintain these files.
+In general, a user will not need to manually edit the contents of the store, instead letting hermes maintain these files.
 
 ## FILES
 
 * `/etc/hermes/cfg.jdn` - This is the store config. It's format will be discussed in [CONFIGURATION][].
 
-* `/etc/hermes/signing-key-$ID.sec` - The repository secret key, this key is in a format understood by hermes-signify(1).
-  The repository uses this key to prove it's identity to peer package stores during package import/export. In general, package stores
+* `/etc/hermes/signing-key-$ID.sec` - The store secret key in a format understood by hermes-signify(1).
+  The store uses this key to prove it's identity to peer package stores during package export. In general, package stores
   only accept packages from package stores with a corresponding entry in the `/etc/hermes/trusted-pub-keys` directory.
 
-* `/etc/hermes/signing-key-$ID.pub` - The repository public key, this key is in a format understood by hermes-signify(1). This
+* `/etc/hermes/signing-key-$ID.pub` - A store public key in a format understood by hermes-signify(1). This
   key can be added to peer package stores to enable trusted package transfers between them.
 
 * `/etc/hermes/signing-key.sec` - A symlink link to the secret key package path without the key ID.
@@ -42,7 +42,7 @@ In general, a user will not need to manually edit the contents of the repository
 * `/etc/hermes/signing-key.pub` - A symlink link to the public key package path without the key ID.
 
 * `/etc/hermes/trusted-pub-keys` - A directory containing public keys from other package store this package store trusts. Trust
-  means the package store considers packages signed by the corresponding secret key, valid for the given package hash.
+  means the package store considers packages signed by the corresponding secret key valid for the given package hash.
   A user may manually copy keys into this store to setup trust. The trust system is used as a basis for the security of
   commands like hermes-cp(1), hermes-pkgstore-recv(1).
 
@@ -92,8 +92,6 @@ Example single-user configuration:
   :mode :single-user
 }
 ```
-
-
 
 ## PACKAGE DATABASE
 
