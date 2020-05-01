@@ -44,7 +44,7 @@ which are linked below.
 
 ## AUXILLARY SUBCOMMANDS
 
-* hermes-show-build-deps(1)
+* hermes-show-build-deps(1) - Show a visualization package of build time dependencies.
 
 ## ENVIRONMENT
 
