@@ -48,6 +48,15 @@ Once this is done you can optionally enable multi user mode, outlined below.
 
 As hermes can manage dependencies, it can be used to manage it's own dependencies.
 
+Initialize a package store:
+
+```
+$ hermes init
+```
+
+Use the provided dev-shell script to configure and enter a development environment. If your hermes package store does not have a cache server configured, it may take a while
+as the correct version of gcc may be compiled from source code.
+
 ```
 $ cd hermes
 $ sh ./support/dev-shell.sh

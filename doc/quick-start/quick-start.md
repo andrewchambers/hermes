@@ -45,30 +45,10 @@ Lets see what you have just created:
 
 ```
 
-What are these files?
+Hermes has created a configuration file - cfg.jdn, some security keys used for package verifying packages, an sqlite database of installed packages, some lock files for coordinating
+parallel package builds, and a folder - /hpkg for installing packages into. 
 
-### /hpkg
-
-This is the directory all your packages will be installed under.
-
-### /etc/hermes/cfg.jdn
-
-This is the store config. This store is setup in single user mode at the moment, so the 
-config is relatively empty.
-
-### /etc/hermes/signing-key...
-
-Signing keys are related to how hermes package stores trust eachother to provide
-secure packages across the network, we will cover them in a later section.
-
-### /var/hermes/hermes.db
-
-This is an sqlite database containing metadata about installed packages.
-
-### /var/hermes/lock/*
-
-Lock files used by hermes during package builds and other operations.
-
+For a detailed reference of these files see the [package store manual entry](../man/hermes-package-store.7.md),
 
 ## Installing your first package
 
