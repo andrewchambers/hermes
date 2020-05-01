@@ -3,11 +3,12 @@ hermes(1) - Software Environment Manager
 
 ## SYNOPSIS
 
-`hermes` init ...<br>
-`hermes` build ...<br>
-`hermes` gc ...<br>
-`hermes` cp ...<br>
-`hermes` show-build-deps ...<br>
+`hermes` init<br>
+`hermes` build<br>
+`hermes` gc<br>
+`hermes` cp<br>
+`hermes` show-build-deps<br>
+`hermes` version<br>
 
 ## DESCRIPTION
 
@@ -45,6 +46,7 @@ which are linked below.
 ## AUXILLARY SUBCOMMANDS
 
 * hermes-show-build-deps(1) - Show a visualization package of build time dependencies.
+* hermes-version(1) - Print the hermes version.
 
 ## ENVIRONMENT
 

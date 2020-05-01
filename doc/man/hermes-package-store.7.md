@@ -3,7 +3,7 @@ hermes-package-store(7) - Hermes package store
 
 ## SYNOPSIS
 
-A hermes package store directory tree after initialization, rooted at `HERMES_STORE` :
+A hermes package store directory tree rooted at `HERMES_STORE` after initialization:
 
     $HERMES_STORE
     ├── etc
@@ -23,8 +23,8 @@ A hermes package store directory tree after initialization, rooted at `HERMES_ST
 
 ## DESCRIPTION
 
-Hermes maintains a database of packages which we refer to as a package store, this manual page describes all aspects of the package store for your reference.
-In general, a user will not need to manually edit the contents of the store, instead letting hermes maintain these files.
+Hermes maintains a database of packages which we refer to as a package store, this manual page describes all aspects of the package store.
+In general, a user will not need to manually edit the contents of the store, instead letting hermes maintain most of these files.
 
 ## FILES
 
