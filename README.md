@@ -22,11 +22,18 @@ the same way you do with your existing source code.
 
 Hermes also provides some nifty features:
 
-- Transparent build caching.
-- Remote package builds.
-- Remote deployment.
-- Atomic upgrades and rollback.
-- and more...
+* A decentralized packaging model.
+* Easy installation of software over URLS.
+* Easy transfer of software environments between computers.
+* Avoidance of version conflicts with already installed software.
+* Installing software from source code.
+* Transparent build artifact caching.
+* Strong support for software auditability.
+* Transparent build caching.
+* Remote package builds.
+* Remote deployments.
+* Atomic upgrades and rollback.
+* and more...
 
 ## What does using Hermes look like?
 
