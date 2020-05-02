@@ -1,5 +1,5 @@
 hermes-package-store(7) - Hermes package store
-===============================================
+==============================================
 
 ## SYNOPSIS
 
@@ -52,7 +52,7 @@ In general, a user will not need to manually edit the contents of the store, ins
 * `/var/hermes/hermes.db` An sqlite3 database containing a list of all installed packages, metadata and package roots.
   See [PACKAGE DATABASE][] for documentation on the database schema.
 
-* `/var/hermes/lock/`  - A directory containing lockfiles used by hermes, see [LOCKS][] for information about
+* `/var/hermes/lock/`  - A directory containing lock files used by hermes, see [LOCKS][] for information about
 possible locks.
 
 
@@ -116,10 +116,10 @@ The follow is a summary of the various locks used by hermes.
 - `gc.lock` This lock is aquired in an exclusive manner when hermes-pkgstore-gc(1) is running. This lock is also acquired in a shared
   manner while the package store is being updated, such as by hermes-pkgstore-build(1).
 
-- `build-$HASH.lock` This form of lockfile corresponds to a package, and are held exclusively during package builds preventing multiple
+- `build-$HASH.lock` This form of lock file corresponds to a package, and are held exclusively during package builds preventing multiple
   instances of hermes-pkgstore-build(1) from attempting to build the same package.
 
-- `user-$NAME.lock` This form of lockfile corresponds to a build user when the package store is in multi user mode. The lockfile is held exclusively
+- `user-$NAME.lock` This form of lock file corresponds to a build user when the package store is in multi user mode. The lock file is held exclusively
   when a build user is being used during a package build. These locks help ensure isolation of the package builds, preventing one package build
   from influencing the package output of a concurrently building package.
 

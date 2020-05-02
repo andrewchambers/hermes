@@ -1,4 +1,4 @@
-(import https://raw.githubusercontent.com/andrewchambers/hpkgs/c2ca91b20de5b5d02c31174b0c760ddf4dfa331e/core)
+(import https://raw.githubusercontent.com/andrewchambers/hpkgs/f2f31b6b5aa14494a0ec765b96d3e3f0bf0cd598/core)
 
 (core/defpkg zlib
   :src-url "https://www.zlib.net/zlib-1.2.11.tar.gz"
@@ -76,9 +76,9 @@
     :name "janet"
     :src  
       (fetch
-        :url "https://github.com/janet-lang/janet/tarball/63812c9f80e80664d3dd334a148283e1dcfeea4f"
+        :url "https://github.com/janet-lang/janet/tarball/761ea65d817693308da34be98ed22d7646db5395"
         :file-name "janet.tar.gz"
-        :hash "sha256:fdfbcb8cd531339c7599c2a2e34d948e4503f12920de7621e2c5d662627e6749")
+        :hash "sha256:12c0c351c545f6ba2f0408217037cce60d5840ea6b3f76590f01efd6431f41bc")
     :configure-phase
       (fn []
         (->>

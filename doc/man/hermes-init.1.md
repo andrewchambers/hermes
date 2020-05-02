@@ -15,7 +15,7 @@ must be performed by the root user.
 
 If `HERMES_STORE` is set, the package store at this path is initialized and is owned by the current user.
 
-For details about the contents of the package store after initialization, see hermes-package-store(7)
+For details about the contents of the package store after initialization, see hermes-package-store(7).
 
 ## ENVIRONMENT
 
