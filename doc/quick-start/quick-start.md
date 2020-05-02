@@ -24,7 +24,7 @@ $ export HERMES_STORE=/tmp/hermes-store
 $ hermes init 
 ```
 
-Lets see what you have just created:
+Let's see what you have just created:
 
 ```
 /tmp/hermes-store/
@@ -45,7 +45,7 @@ Lets see what you have just created:
 
 ```
 
-Hermes has created a configuration file - cfg.jdn, some security keys used for package verifying packages, an sqlite database of installed packages, some lock files for coordinating
+Hermes has created a configuration file - cfg.jdn, some security keys used for verifying packages, an sqlite database of installed packages, some lock files for coordinating
 parallel package builds, and a folder - /hpkg for installing packages into. 
 
 For a detailed reference of these files see the [package store manual entry](../man/hermes-package-store.7.md),
@@ -54,7 +54,7 @@ For a detailed reference of these files see the [package store manual entry](../
 
 Now that hermes is installed and initialized, we can start building/installing packages.
 
-First lets install the binary seed package (the root dependency of all packages.):
+First let's install the binary seed package (the root dependency of all packages.):
 ```
 $ git clone https://github.com/andrewchambers/hpkgs
 $ hermes build --module ./hpkgs/core.hpkg --expression seed-env --output ./seed-env
@@ -83,8 +83,8 @@ $ ./seed-env/bin/ls ./seed-env/bin
 
 ### A note about funny package paths
 
-Hermes packages are installed into a path based on it's cryptographic hash. In practice this
-simply means we can install many variations of the same package and not have to worry about them conflicting and breakign each other.
+Hermes packages are installed into a path based on its cryptographic hash. In practice this
+simply means we can install many variations of the same package and not have to worry about them conflicting and breaking each other.
 
 ## Uninstalling packages
 
@@ -143,7 +143,7 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 To use packages, you can add them your PATH. Some packages might require more involved
 setup, in these cases, as a convention, packages that are 'environments' provide an activate script.
 
-you can try this with the core-env you have built by running: 
+You can try this with the core-env you have built by running:
 ```
 $ ./core-env/bin/dash
 $ . ./core-env/activate
@@ -172,7 +172,7 @@ When both hashes match, it means you have the ability to regenerate *all* of you
 
 Hermes packages are closely related to the [janet programming language](https://janet-lang.org).
 
-A package is simply a janet object with a builder function, here is perhaps the simplest package:
+A package is simply a janet object with a builder function. Here is perhaps the simplest package:
 
 ```
 $ hermes build -e '(pkg :name "empty-package" :builder (fn [] nil))'
@@ -183,7 +183,7 @@ $ cat ./result/.hpkg.jdn
 ```
 
 
-First, lets create a package with a file in it:
+First, let's create a package with a file in it:
 ```
 $ echo "hello" > hello.txt
 $ hermes build -e '(local-file "./hello.txt")'
@@ -195,7 +195,7 @@ hello
 The example used the builtin ```local-file``` function to create a package object, containing
 our desired content.
 
-Now, lets create a package with a file we have downloaded from the internet:
+Now, let's create a package with a file we have downloaded from the internet:
 
 ```
 $ hermes build -e '
@@ -208,9 +208,9 @@ $ hermes build -e '
 This example used the builtin fetch function to fetch content. Hermes requires external content to specifiy file hashes to ensure
 builds are reproducible.
 
-Now lets create more interesting packages:
+Now let's create more interesting packages:
 
-The following packages will quite ugly, but later we will see better functions for creating packages more easily.
+The following packages are quite ugly, but later we will see better functions for creating packages more easily.
 
 ```
 $ hermes build -e '
@@ -228,7 +228,7 @@ hello world!
 ```
 
 Packages must write their output to a designated output path, ```(dyn :pkg-out)``` fetches this value from the janet dynamically scoped variable named
-by the janet keyword :pkg-out. The builder then writes this file using 'spit' function, to spit data to disk.
+by the janet keyword :pkg-out. The builder then writes this file using the 'spit' function, to spit data to disk.
 
 
 Finally, let us put everything we tried together:
@@ -281,9 +281,9 @@ packages if someone else has defined suitable functions for you to use.
 
 ## Multi user mode
 
-Until now, you have been user a private package store that only your
+Until now, you have been using a private package store that only your
 user can access. Hermes also supports a shared global package store, that allows 
-all users on the same system share a package store securely.
+all users on the same system to share a package store securely.
 
 Usage in multi user mode is the same, but packages are installed into /hpkg instead of your HERMES_STORE.
 
@@ -309,7 +309,7 @@ when they are needed.
 
 ## Transferring packages between computers
 
-We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed, 
+We can use ```hermes cp``` to transfer arbitrary packages (and their dependencies) between computers, provided hermes is installed
 and has a package store at the same path. Hermes cp is efficient and only copies packages that do not exist on the remote server.
 
 
