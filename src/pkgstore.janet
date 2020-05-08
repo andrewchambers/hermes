@@ -604,7 +604,7 @@
                       (_hermes/setgid 0)
                       (_hermes/cleargroups)
                       (_hermes/mount "proc" (string chroot "/proc") "proc" 0)
-                      (_hermes/mount "/dev" (string chroot "/dev") "" _hermes/MS_BIND)
+                      (_hermes/mount "/dev" (string chroot "/dev") "" (bor _hermes/MS_BIND _hermes/MS_REC))
                       (_hermes/mount hpkg (string chroot hpkg) "" (bor _hermes/MS_BIND _hermes/MS_RDONLY))
                       (_hermes/mount pkg-path (string chroot pkg-path) "" _hermes/MS_BIND)
                       (_hermes/mount fetch-socket-path (string chroot "/tmp/fetch.sock") "" _hermes/MS_BIND)
