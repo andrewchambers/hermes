@@ -622,7 +622,7 @@
 
               (spit-do-build-thunk do-build)
               (sh/$ [
-                "hermes-namespace-container" "-u" "-m" "-u" "-p" 
+                "hermes-namespace-container" "-u" "-m" "-u" "-p" "-i"
                  ;(if allow-network
                    []
                    ["-n"])
