@@ -75,13 +75,15 @@
   (defn handle-connections
     []
     (def c (:accept listener-socket))
-    (if-let [child (process/fork)]
+    (if-let [child (_hermes/fork)
+             is-parent (not= 0 child)]
       (do
         (file/close c)
-        (process/wait child))
+        (_hermes/wait-for-pid-exit child))
       # Double fork to prevent zombies and ensure
       # we cleanup all resources asap.
-      (if-let [child (process/fork)]
+      (if-let [child (_hermes/fork)
+               is-parent (not= 0 child)]
         (_hermes/exit 0)
         (try
           (do

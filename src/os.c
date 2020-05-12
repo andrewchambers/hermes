@@ -407,3 +407,42 @@ Janet jsync(int argc, Janet *argv)
     sync();
     return janet_wrap_nil();
 }
+
+Janet jfork(int argc, Janet *argv)
+{
+    janet_fixarity(argc, 0);
+    pid_t p = fork();
+    if (p < 0)
+        janet_panicf("fork failed - %s", strerror(errno));
+    return janet_wrap_number(p);
+}
+
+Janet waitforpidexit(int argc, Janet *argv)
+{
+    int err;
+    int wstatus;
+    pid_t p;
+
+    janet_fixarity(argc, 1);
+
+    p = janet_getnumber(argv, 0);
+
+    do {
+        err = waitpid(p, &wstatus, 0);
+    } while (err < 0 && errno == EINTR);
+
+    if (err < 0)
+        janet_panicf("waitpid failed - %s", strerror(errno));
+
+    int exit_code;
+    if (WIFEXITED(wstatus)) {
+        exit_code = WEXITSTATUS(wstatus);
+    } else if (WIFSIGNALED(wstatus)) {
+        // Should this be a function of the signal?
+        exit_code = 129;
+    } else {
+        // unreachable afaik
+        abort();
+    }
+    return janet_wrap_number(exit_code);
+}

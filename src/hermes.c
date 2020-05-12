@@ -208,6 +208,8 @@ static const JanetReg cfuns[] = {
     {"nuke-path", nuke_path, NULL},
     {"mount", jmount, NULL},
     {"sync", jsync, NULL},
+    {"fork", jfork, NULL},
+    {"wait-for-pid-exit", waitforpidexit, NULL},
     {NULL, NULL, NULL}
 };
 
