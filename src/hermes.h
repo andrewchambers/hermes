@@ -114,5 +114,3 @@ Janet unix_connect(int argc, Janet *argv);
 Janet nuke_path(int argc, Janet *argv);
 Janet jmount(int argc, Janet *argv);
 Janet jsync(int argc, Janet *argv);
-Janet jfork(int argc, Janet *argv);
-Janet waitforpidexit(int argc, Janet *argv);

@@ -250,7 +250,7 @@ Create hello.hpkg
       (os/setenv "PATH" (string (core/seed-env :path) "/bin"))
       (def src (first (sh/glob (string (hello-src :path) "/*.c"))))
       (def out (string (dyn :pkg-out) "/hello"))
-      (sh/$ ["x86_64-linux-musl-gcc" "-static" "-o" out  src]))))
+      (sh/$ x86_64-linux-musl-gcc -static -o ,out src))))
 ```
 
 Now we can build our package:

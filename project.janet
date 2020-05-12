@@ -16,7 +16,8 @@
     "https://github.com/andrewchambers/janet-uri.git"
     "https://github.com/andrewchambers/janet-jdn.git"
     "https://github.com/andrewchambers/janet-flock.git"
-    "https://github.com/andrewchambers/janet-process.git"
+    "https://github.com/andrewchambers/janet-posix-spawn.git"
+    "https://github.com/andrewchambers/janet-fork.git"
     "https://github.com/andrewchambers/janet-sh.git"
     "https://github.com/andrewchambers/janet-base16.git"
     "https://github.com/andrewchambers/janet-shlex.git"
@@ -32,11 +33,11 @@
 
 (def *lib-archive-cflags*
   (shlex/split
-    (sh/$$_ ~[pkg-config --cflags ,;(if *static-build* ['--static] []) libarchive])))
+    (sh/$<_ pkg-config --cflags ;(if *static-build* ['--static] []) libarchive)))
 
 (def *lib-archive-lflags*
   (shlex/split
-    (sh/$$_ ~[pkg-config --libs ,;(if *static-build* ['--static] []) libarchive])))
+    (sh/$<_ pkg-config --libs ;(if *static-build* ['--static] []) libarchive)))
 
 (defn src-file?
   [path]
@@ -65,8 +66,8 @@
   (def wd (os/cwd))
   (defer (os/cd wd)
     (os/cd "./third-party/signify")
-    (sh/$ ["make" ;(if *static-build* ["EXTRA_LDFLAGS=--static"] [])])
-    (sh/$ ["cp" "-v" "signify" "../../build/hermes-signify"])))
+    (sh/$ make ;(if *static-build* ["EXTRA_LDFLAGS=--static"] []))
+    (sh/$ cp -v signify ../../build/hermes-signify)))
 
 (defn declare-simple-c-prog
   [&keys {
@@ -79,14 +80,13 @@
   (default extra-lflags [])
   (def out (string "build/" name))
   (rule out src
-    (sh/$ [
+    (sh/$
       (or (os/getenv "CC") "gcc")
       ;extra-cflags
       ;(if *static-build* ["--static"] [])
       ;src
       ;extra-lflags
-      "-o" out
-    ]))
+      "-o" ,out))
 
   (each h hermes-headers
     (add-dep out h)))
@@ -166,12 +166,11 @@
    "hermes-namespace-container"])
 
 (rule "build/hermes.tar.gz" (map |(string "build/" $) output-bins)
-  (sh/$ ~[
+  (sh/$ 
      tar -C ./build
      -czf build/hermes.tar.gz
      --files-from=-
-    ]
-    :redirects [[stdin (string/join output-bins "\n")]]))
+    < [stdin (string/join output-bins "\n")]))
 
 (add-dep "build" "build/hermes.tar.gz")
 
@@ -179,7 +178,7 @@
   (def wd (os/cwd))
   (defer (os/cd wd)
     (os/cd "./third-party/signify")
-    (sh/$ ["make" "clean"] :redirects [[stdout :null]])))
+    (sh/$ make clean > :null)))
 
 
 (add-dep "clean" "clean-third-party")

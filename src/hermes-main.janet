@@ -2,7 +2,8 @@
 (import sh)
 (import uri)
 (import path)
-(import process)
+(import posix-spawn)
+(import fork)
 (import ./download)
 (import ./tempdir)
 (import ./pkgstore)
@@ -201,7 +202,7 @@
     "hermes-pkgstore"
     "init" "-s" *store-path*
   ])
-  (os/exit (process/run pkgstore-cmd)))
+  (os/exit (posix-spawn/run pkgstore-cmd)))
 
 (def- build-params
   ["Build a hermes package."
@@ -286,7 +287,7 @@
             build-host])
         (eprintf "%j" fetch-proxy-cmd)
         (def fetch-proxy
-          (process/spawn fetch-proxy-cmd))
+          (posix-spawn/spawn fetch-proxy-cmd))
 
         (def scp-cmd @["scp"
                        "-oBatchMode=yes"
@@ -294,7 +295,7 @@
                        pkg-path
                        (string build-host ":" rpkg-path)])
         (eprintf "%j" scp-cmd)
-        (sh/$ scp-cmd)
+        (sh/$ ;scp-cmd)
         
         (def pkgstore-build-cmd
           @["ssh"
@@ -313,7 +314,7 @@
         
         (def result-path-buf @"")
         (def build-exit-code
-          (process/run pkgstore-build-cmd :redirects [[stdout result-path-buf]]))
+          (first (sh/run ;pkgstore-build-cmd > ,result-path-buf)))
 
         (unless (zero? build-exit-code)
           (os/exit build-exit-code))
@@ -331,7 +332,7 @@
           @["hermes" "cp" (string "ssh://" build-host rroot) ;cp-target-args])
         (eprintf "%j" cp-cmd)
         (def cp-exit-status
-          (process/run cp-cmd))
+          (posix-spawn/run cp-cmd))
         (:close rtmpdir)
         (when (zero? cp-exit-status)
           (print (string result-path-buf)))
@@ -349,7 +350,7 @@
             ;(if-let [output (parsed-args "output")] ["--output" output] [])])
 
         (def build-exit-code
-          (process/run pkgstore-build-cmd))
+          (posix-spawn/run pkgstore-build-cmd))
         
         build-exit-code)))
 
@@ -370,7 +371,7 @@
   
   (def pkgstore-cmd
     @["hermes-pkgstore" "gc" "-s" *store-path* ;(if (parsed-args "ignore-ttl") ["--ignore-ttl"] [])])
-  (os/exit (process/run pkgstore-cmd)))
+  (os/exit (posix-spawn/run pkgstore-cmd)))
 
 (def- cp-params
   ["Copy a package closure between package stores."
@@ -432,16 +433,16 @@
             ;(if to ["-o"  to] [])
             ;(if (parsed-args "allow-untrusted") ["--allow-untrusted"] [])])))
 
-  (def [pipe1< pipe1>] (process/pipe))
-  (def [pipe2< pipe2>] (process/pipe))
+  (def [pipe1< pipe1>] (posix-spawn/pipe))
+  (def [pipe2< pipe2>] (posix-spawn/pipe))
 
-  (with [send-proc (process/spawn from-cmd :redirects [[stdout pipe1>] [stdin pipe2<]])]
-  (with [recv-proc (process/spawn to-cmd :redirects [[stdout pipe2>] [stdin pipe1<]])]
+  (with [send-proc (posix-spawn/spawn from-cmd :file-actions [[:dup2 pipe1> stdout] [:dup2 pipe2< stdin]])]
+  (with [recv-proc (posix-spawn/spawn to-cmd :file-actions [[:dup2 pipe2> stdout] [:dup2 pipe1< stdin]])]
     
-    (map file/close [pipe1< pipe1> pipe2< pipe2>])
+    (each f [pipe1< pipe1> pipe2< pipe2>] (file/close f))
 
-    (let [send-exit (process/wait send-proc)
-          recv-exit (process/wait recv-proc)]
+    (let [send-exit (posix-spawn/wait send-proc)
+          recv-exit (posix-spawn/wait recv-proc)]
       (unless (and (zero? send-exit)
                    (zero? recv-exit))
         (error "copy failed"))))))

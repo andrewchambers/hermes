@@ -1,3 +1,4 @@
+(import posix-spawn)
 (import sh)
 (import sqlite3)
 (import path)
@@ -102,10 +103,10 @@
       (def store-id (base16/encode (os/cryptorand 16)))
       (def secret-key-path (string path "/etc/hermes/signing-key-" store-id ".sec"))
       (def public-key-path (string path "/etc/hermes/signing-key-" store-id ".pub"))
-      (sh/$ ['hermes-signify '-G '-n
-               '-c "Hermes package store key" 
-               "-s" secret-key-path
-               '-p  public-key-path])
+      (sh/$ hermes-signify -G -n
+               -c "Hermes package store key" 
+               -s secret-key-path
+               -p  ,public-key-path)
       (os/symlink 
          (string "./signing-key-" store-id ".sec")
          (string path "/etc/hermes/signing-key.sec"))
@@ -421,7 +422,7 @@
     (if (= idx (length users))
       (do
         # XXX exp backoff?
-        (eprintf "waiting for more free build user...")
+        (eprintf "waiting for a free build user...")
         (os/sleep 0.5)
         (select-and-lock-build-user users 0))
       (let [u (users idx)]
@@ -558,7 +559,8 @@
                         (pkg-builder))))
                   (make-builder (pkg :path) (pkg :builder) build-dir fetch-socket-path parallelism)))
               (spit-do-build-thunk do-build)
-              (sh/$ [ "hermes-builder" "-t" thunk-path]))
+              (unless (sh/$? hermes-builder -t ,thunk-path)
+                (error "builder failed")))
             (do
               # chrooted sandbox build for multi user store.
               (def hpkg (string *store-path* "/hpkg"))
@@ -621,13 +623,14 @@
                   (make-builder chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-network)))
 
               (spit-do-build-thunk do-build)
-              (sh/$ [
-                "hermes-namespace-container" "-u" "-m" "-u" "-p" "-i"
-                 ;(if allow-network
-                   []
-                   ["-n"])
-                "--" 
-                "hermes-builder" "-t" thunk-path]))))
+              (unless (sh/$?
+                         hermes-namespace-container -u -m -u -p -i
+                         ;(if allow-network
+                           []
+                           ["-n"])
+                        -- 
+                        hermes-builder -t ,thunk-path)
+                (error "builder failed")))))
 
         # Ensure files have correct owner, clear any permissions except execute.
         (_hermes/storify (pkg :path) *store-owner-uid* *store-owner-gid*)
@@ -693,7 +696,7 @@
       (def sig-path (string (tempdir :path) "/challenge.sig"))
       (spit msg-path challenge)
       (def key-name (path/basename pub-key))
-      (sh/$ ['hermes-signify '-q '-S '-s sec-key '-m msg-path '-x sig-path])
+      (sh/$ hermes-signify -q -S -s ,sec-key -m ,msg-path -x ,sig-path)
       (protocol/send-msg out [:challenge-response {:key-name key-name :sig (slurp sig-path)}]))
     (error "protocol error, expected :challenge-trust"))
 
@@ -759,8 +762,8 @@
         (spit msg-path challenge)
         (spit sig-path sig)
 
-        (unless (sh/$? ['hermes-signify '-V '-x sig-path '-m msg-path '-p pub-key]
-                  :redirects [[stdout :null] [stderr :null]])
+        (unless (sh/$? hermes-signify -V -x ,sig-path -m ,msg-path -p ,pub-key
+                  > [stdout :null] > [stderr :null])
           (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*")))
       (error "protocol error, expected :challenge-response")))
 

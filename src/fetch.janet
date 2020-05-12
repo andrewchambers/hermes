@@ -1,4 +1,4 @@
-(import process)
+(import fork)
 (import ./download)
 (import ./protocol)
 (import ./hash)
@@ -75,15 +75,13 @@
   (defn handle-connections
     []
     (def c (:accept listener-socket))
-    (if-let [child (_hermes/fork)
-             is-parent (not= 0 child)]
+    (if-let [child (fork/fork)]
       (do
         (file/close c)
-        (_hermes/wait-for-pid-exit child))
+        (fork/wait child))
       # Double fork to prevent zombies and ensure
       # we cleanup all resources asap.
-      (if-let [child (_hermes/fork)
-               is-parent (not= 0 child)]
+      (if-let [child (fork/fork)]
         (_hermes/exit 0)
         (try
           (do
@@ -97,7 +95,7 @@
 
 (defn spawn-server
   [listener-socket content-map]
-  (if-let [child (process/fork)]
+  (if-let [child (fork/fork)]
     child
     (do
       (serve listener-socket content-map)
