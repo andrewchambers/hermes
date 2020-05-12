@@ -1,4 +1,4 @@
-(import process)
+(import posix-spawn)
 (import jdn)
 
 (def- sz-buf @"")
@@ -64,39 +64,43 @@
 
 (defn send-dir
   [f path]
-  (def [p1 p2] (process/pipe))
+  (def [p1 p2] (posix-spawn/pipe))
+  (def wd (os/cwd))
   (defer (do
+           (os/cd wd)
            (file/close p1)
            (file/close p2))
-    (with [tar (process/spawn
+    (os/cd path)
+    (with [tar (posix-spawn/spawn
                   ["hermes-minitar"
                    "-c"
                    "-z"
                    "-f" "-"
                    "."]
-                  :start-dir path
-                  :redirects [[stdout p2]])]
+                  :file-actions [[:dup2 p2 stdout]])]
       (file/close p2)
       (send-file f p1)
-      (unless (zero? (process/wait tar))
+      (unless (zero? (posix-spawn/wait tar))
         (error "sending directory failed")))))
 
 (defn recv-dir
   [f path]
+  (def wd (os/cwd))
   (os/mkdir path)
-  (def [p1 p2] (process/pipe))
+  (def [p1 p2] (posix-spawn/pipe))
   (defer (do
+           (os/cd wd)
            (file/close p1)
            (file/close p2))
-    (with [tar (process/spawn
+    (os/cd path)
+    (with [tar (posix-spawn/spawn
                   ["hermes-minitar"
                    "-x"
                    "-z"
                    "-f" "-"]
-                  :start-dir path
-                  :redirects [[stdin p1]])]
+                  :file-actions [[:dup2 p1 stdin]])]
       (file/close p1)
       (recv-file f p2)
       (file/close p2)
-      (unless (zero? (process/wait tar))
+      (unless (zero? (posix-spawn/wait tar))
         (error "receiving directory failed")))))

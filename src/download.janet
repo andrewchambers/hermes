@@ -1,15 +1,15 @@
-(import process)
+(import posix-spawn)
 
 (defn download
   [url on-data]
   
-  (def [pipe> pipe<] (process/pipe))
+  (def [pipe> pipe<] (posix-spawn/pipe))
   (defer (do (:close pipe>)
              (:close pipe<))
     (with [errorf (file/temp)]
-    (with [curl (process/spawn 
+    (with [curl (posix-spawn/spawn 
                   ["curl" "--silent" "--show-error" "--fail" "-L" url]
-                  :redirects [[stdout pipe<] [stderr errorf]])]
+                  :file-actions [[:dup2 pipe< stdout] [:dup2 errorf stderr]])]
       (:close pipe<)
       
       (def outf (file/temp))
@@ -24,7 +24,7 @@
             (get-file-chunks))))
       (get-file-chunks)
 
-      (if (zero? (process/wait curl))
+      (if (zero? (posix-spawn/wait curl))
         :ok
         (do
           (file/seek errorf :set 0)
