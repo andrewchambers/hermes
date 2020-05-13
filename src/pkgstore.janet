@@ -105,8 +105,8 @@
       (def public-key-path (string path "/etc/hermes/signing-key-" store-id ".pub"))
       (sh/$ hermes-signify -G -n
                -c "Hermes package store key" 
-               -s secret-key-path
-               -p  ,public-key-path)
+               -s ,secret-key-path
+               -p ,public-key-path)
       (os/symlink 
          (string "./signing-key-" store-id ".sec")
          (string path "/etc/hermes/signing-key.sec"))
