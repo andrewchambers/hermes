@@ -218,7 +218,7 @@ main(int argc, char *argv[])
 
     flags = 0;
 
-    while ((opt = getopt(argc, argv, "Cimnptu")) != -1) {
+    while ((opt = getopt(argc, argv, "Cimnpu")) != -1) {
         switch (opt) {
         case 'C':
             flags |= CLONE_NEWCGROUP;
