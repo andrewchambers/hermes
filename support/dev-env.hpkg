@@ -52,16 +52,22 @@
               --prefix= ^ (dyn :pkg-out)))
       (sh/$ make
             -j (dyn :parallelism)
+            CFLAGS= ^ (os/getenv "CFLAGS")
+            LDFLAGS= ^ (os/getenv "LDFLAGS" "")
             PREFIX= ^ (dyn :pkg-out)
             install)
       (os/cd "..")
       (sh/$ rm -rf "./dep"))
-
-    (install-dep zlib-src)
-    (install-dep xz-src)
-    (install-dep lz4-src)
-    (install-dep libbsd-src)
-    (install-dep bzip2-src)
+    (each src [libbsd-src zlib-src xz-src lz4-src bzip2-src]
+      (install-dep src))
+    (os/setenv "CFLAGS" (string
+                          (os/getenv "CFLAGS") " "
+                          "-I" (dyn :pkg-out) "/include "
+                          (sh/$<_ pkg-config --cflags zlib liblzma liblz4)))
+    (os/setenv "LDFLAGS" (string
+                           "-L" (dyn :pkg-out) "/lib "
+                           "-Wl,-rpath=" (dyn :pkg-out) "/lib "
+                           (sh/$<_ pkg-config --libs zlib liblzma liblz4)))
     (install-dep libarchive-src)
     (rewrite (string (dyn :pkg-out) "/lib/pkgconfig/libarchive.pc")
              |(string/replace "Libs: " (string "Libs: -Wl,-rpath=" (dyn :pkg-out) "/lib ") $))

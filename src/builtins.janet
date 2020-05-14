@@ -4,6 +4,7 @@
 (import ./hash)
 (import ./download)
 (import ./fetch)
+(import ./walkpkgstore)
 (import ../build/_hermes)
 
 (defn pkg
@@ -126,6 +127,7 @@
 
 (def hermes-env (merge-into @{} root-env))
 (put hermes-env 'pkg @{:value pkg})
+(put hermes-env 'walk-pkgs @{:value walkpkgstore/walk-pkgs})
 (put hermes-env 'add-mirror @{:value add-mirror})
 (put hermes-env 'fetch  @{:value fetch})
 (put hermes-env 'fetch* @{:value fetch/fetch*})
