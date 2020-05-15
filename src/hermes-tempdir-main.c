@@ -64,7 +64,7 @@ finish:
 static volatile sig_atomic_t interrupted = 0;
 
 static void sighandler(int signo, siginfo_t *siginfo, void *context) {
-    if (signo != SIGALRM) {
+    if (signo == SIGTERM || signo == SIGQUIT) {
         interrupted = 1;
     }
 }
