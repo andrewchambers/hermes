@@ -180,7 +180,7 @@
                        url-scheme (parsed-url :scheme)]
                 module-path
                 (path/abspath module-path)))
-            (merge-into @{} builtins/hermes-env (require module-path)))
+            (merge-into @{} builtins/hermes-env (require module-path :exit true)))
           (merge-into @{} builtins/hermes-env)))
       (eval-expression-in-env expr env))))
 
