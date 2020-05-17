@@ -98,6 +98,9 @@
    "ttl" 
       {:kind :option
        :help "Only allow garbage collection of the package after ttl seconds."}
+    "debug"
+     {:kind :flag
+      :help "Allow stdin and interactivity during build, build always fails."}
    "no-out-link"
      {:kind :flag
       :short "n"
@@ -112,6 +115,8 @@
     (os/exit 1))
   
   (def store (parsed-args "store"))
+
+  (def debug (parsed-args "debug"))
   
   (def user-info (get-user-info))
 
@@ -162,7 +167,8 @@
     :fetch-socket-path fetch-socket-path
     :gc-root (unless (parsed-args "no-out-link") (parsed-args "output"))
     :parallelism parallelism
-    :ttl ttl)
+    :ttl ttl
+    :debug debug)
   
   (print (pkg :path)))
 

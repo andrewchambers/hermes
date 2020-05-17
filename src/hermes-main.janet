@@ -230,6 +230,9 @@
    "ttl" 
       {:kind :option
        :help "Only allow garbage collection of the package after ttl seconds."}
+   "debug"
+     {:kind :flag
+      :help "Allow stdin and interactivity during build, build always fails."}
    "no-out-link" 
      {:kind :flag
       :short "n"
@@ -249,6 +252,7 @@
   (unless parsed-args
     (os/exit 1))
   
+  (def debug (parsed-args "debug"))
   (def module (parsed-args "module"))
   (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
   (def pkg (load-pkgs expr module))
@@ -306,6 +310,7 @@
             "-j" parallelism
             "-f" rfetch-socket-path
             ;(if (= *store-path* "") [] ["-s" *store-path*])
+            ;(if debug ["--debug"] [])
             "-p" rpkg-path
             "-o" rroot
             ])
@@ -345,6 +350,7 @@
             "-f" fetch-socket-path
             "-s" *store-path*
             "-p" pkg-path
+            ;(if debug ["--debug"] [])
             ;(if (parsed-args "no-out-link") ["-n"] [])
             ;(if-let [ttl (parsed-args "ttl")] ["--ttl" ttl] [])
             ;(if-let [output (parsed-args "output")] ["--output" output] [])])

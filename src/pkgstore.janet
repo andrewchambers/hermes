@@ -412,8 +412,11 @@
      :gc-root gc-root
      :parallelism parallelism
      :ttl ttl
+     :debug debug
    }]
   (assert *store-config*)
+
+  (def pkg-to-debug (if debug pkg nil))
 
   (def store-mode (*store-config* :mode))
 
@@ -586,7 +589,7 @@
                            ["-n"])
                         -- 
                         hermes-builder -t ,thunk-path
-                        < :null)
+                        ;(if (= pkg pkg-to-debug) [] [:< :null])) # if debug, we allow stdin
                 (error "builder failed")))))
 
         # Ensure files have correct owner, clear any permissions except execute.
@@ -619,6 +622,10 @@
 
         (os/chmod (pkg :path) 8r555)
         (_hermes/sync)
+        
+        (when (= pkg pkg-to-debug)
+          (error "packages being debugged always fail"))
+        
         (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
           {:hash (pkg :hash) :name (pkg :name)})
       nil))
