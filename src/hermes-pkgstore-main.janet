@@ -49,11 +49,11 @@
 
 (def- init-params
   ["Init the hermes package store."
-   "store" 
-     {:kind :option
-      :short "s"
-      :default ""
-      :help "Package store to initialize."}])
+   "store"
+   {:kind :option
+    :short "s"
+    :default ""
+    :help "Package store to initialize."}])
 
 (defn- init
   []
@@ -63,49 +63,48 @@
   (unless parsed-args
     (os/exit 1))
 
-
   (def store (parsed-args "store"))
   (def mode (if (= store "") :multi-user :single-user))
   (pkgstore/init-store mode store))
 
 (def- build-params
   ["Build a marshalled package."
-   "store" 
-     {:kind :option
-      :short "s"
-      :default ""
-      :help "Package store to use for build."}
-   "package" 
-     {:kind :option
-      :short "p"
-      :required true
-      :help "Path to marshalled package."}
-   "fetch-socket-path" 
-     {:kind :option
-      :short "f"
-      :required true
-      :help "Path to fetch socket to use during build."}
-   "output" 
-      {:kind :option
-       :short "o"
-       :default "./result"
-       :help "Path to where package output link will be created."}
-   "parallelism" 
-      {:kind :option
-       :short "j"
-       :default "1"
-       :help "Pass a parallelism hint to package builders."}
-   "ttl" 
-      {:kind :option
-       :help "Only allow garbage collection of the package after ttl seconds."}
-    "debug"
-     {:kind :flag
-      :help "Allow stdin and interactivity during build, build always fails."}
+   "store"
+   {:kind :option
+    :short "s"
+    :default ""
+    :help "Package store to use for build."}
+   "package"
+   {:kind :option
+    :short "p"
+    :required true
+    :help "Path to marshalled package."}
+   "fetch-socket-path"
+   {:kind :option
+    :short "f"
+    :required true
+    :help "Path to fetch socket to use during build."}
+   "output"
+   {:kind :option
+    :short "o"
+    :default "./result"
+    :help "Path to where package output link will be created."}
+   "parallelism"
+   {:kind :option
+    :short "j"
+    :default "1"
+    :help "Pass a parallelism hint to package builders."}
+   "ttl"
+   {:kind :option
+    :help "Only allow garbage collection of the package after ttl seconds."}
+   "debug"
+   {:kind :flag
+    :help "Allow stdin and interactivity during build, build always fails."}
    "no-out-link"
-     {:kind :flag
-      :short "n"
-      :help "Do not create an output link."}
-     "no-out-link"])
+   {:kind :flag
+    :short "n"
+    :help "Do not create an output link."}
+   "no-out-link"])
 
 (defn- build
   []
@@ -113,11 +112,11 @@
   (def parsed-args (argparse/argparse ;build-params))
   (unless parsed-args
     (os/exit 1))
-  
+
   (def store (parsed-args "store"))
 
   (def debug (parsed-args "debug"))
-  
+
   (def user-info (get-user-info))
 
   (if (= store "")
@@ -141,26 +140,26 @@
 
   (def fetch-socket-path (parsed-args "fetch-socket-path"))
   ((fn configure-fetch-socket
-    [&opt nleft]
-    (default nleft 5)
-    (when (> 0 nleft)
-      (error (string "fetch-socket " fetch-socket-path "never appeared")))
-    (if (os/stat fetch-socket-path)
-      (do
-        # We must make the fetch socket
-        # readable by any user so that build users
-        # can connect.
-        # It is protected by being in a private directory.
-        # We could investigate other ways to do
-        # this if possible. PEER_CRED?
-        (os/chmod fetch-socket-path 8r777)
-        nil)
-      (do
-        # If the socket is coming via ssh, its not easy to
-        # tell when it will be ready. We can wait for it to simplify.
-        (def wait-for 0.03)
-        (os/sleep wait-for)
-        (configure-fetch-socket (- nleft wait-for))))))
+     [&opt nleft]
+     (default nleft 5)
+     (when (> 0 nleft)
+       (error (string "fetch-socket " fetch-socket-path "never appeared")))
+     (if (os/stat fetch-socket-path)
+       (do
+         # We must make the fetch socket
+         # readable by any user so that build users
+         # can connect.
+         # It is protected by being in a private directory.
+         # We could investigate other ways to do
+         # this if possible. PEER_CRED?
+         (os/chmod fetch-socket-path 8r777)
+         nil)
+       (do
+         # If the socket is coming via ssh, its not easy to
+         # tell when it will be ready. We can wait for it to simplify.
+         (def wait-for 0.03)
+         (os/sleep wait-for)
+         (configure-fetch-socket (- nleft wait-for))))))
 
   (pkgstore/build
     :pkg pkg
@@ -169,19 +168,19 @@
     :parallelism parallelism
     :ttl ttl
     :debug debug)
-  
+
   (print (pkg :path)))
 
 (def- gc-params
   ["Run the package garbage collector."
-   "ignore-ttl" 
-     {:kind :flag
-      :help "Ignore package ttl roots."}
-   "store" 
-     {:kind :option
-      :short "s"
-      :default ""
-      :help "Package store to run the garbage collector on."}])
+   "ignore-ttl"
+   {:kind :flag
+    :help "Ignore package ttl roots."}
+   "store"
+   {:kind :option
+    :short "s"
+    :default ""
+    :help "Package store to run the garbage collector on."}])
 
 (defn- gc
   []
@@ -204,10 +203,10 @@
 
 (def- send-params
   ["Send a package closure over stdin/stdout with the send/recv protocol."
-   "package" 
-     {:kind :option
-      :short "p"
-      :help "Path to package that is being sent."}])
+   "package"
+   {:kind :option
+    :short "p"
+    :help "Path to package that is being sent."}])
 
 (defn- send
   []
@@ -219,7 +218,7 @@
   (def package (os/realpath (parsed-args "package")))
   (def hpkg-dir (let [pkg-name (path/basename package)]
                   (string/slice package 0 (- -2 (length pkg-name)))))
-  
+
   (unless (string/has-suffix? "/hpkg" hpkg-dir)
     (error (string/format "%v is not a hermes package path" package)))
 
@@ -236,18 +235,18 @@
 
 (def- recv-params
   ["Receive a package closure sent over stdin/stdout with the send/recv protocol."
-   "store" 
-     {:kind :option
-      :short "s"
-      :default ""
-      :help "Package store to receive the closure."}
-    "output" 
-     {:kind :option
-      :short "o"
-      :help "Path to where package output link will be created."}
-    "allow-untrusted" 
-     {:kind :flag
-      :help "Allow the receive end store owner to ignore failed trust challenges"}])
+   "store"
+   {:kind :option
+    :short "s"
+    :default ""
+    :help "Package store to receive the closure."}
+   "output"
+   {:kind :option
+    :short "o"
+    :help "Path to where package output link will be created."}
+   "allow-untrusted"
+   {:kind :flag
+    :help "Allow the receive end store owner to ignore failed trust challenges"}])
 
 (defn- recv
   []

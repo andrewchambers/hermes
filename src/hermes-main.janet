@@ -15,7 +15,7 @@
 
 (var *store-path* "")
 
-(defn- clear-table 
+(defn- clear-table
   [t]
   (each k (keys t) # don't mutate while iterating.
     (put t k 0))
@@ -35,7 +35,7 @@
   [{:cwd cwd
     :environ environ}]
   (eachk k environ
-     (os/setenv k (environ k)))
+    (os/setenv k (environ k)))
   (os/cd cwd))
 
 (defn- load-hpkg-url
@@ -43,9 +43,9 @@
   (with [f (file/temp)]
     (match (download/download url |(file/write f $))
       :ok
-        (file/seek f :set 0)
+      (file/seek f :set 0)
       [:fail err-msg]
-        (error err-msg))
+      (error err-msg))
 
     (put module/loading url true)
     (def newenv (dofile f ;args :source url))
@@ -74,7 +74,7 @@
       (do
         (def url-path-dir (string/slice url-path 0 (- -2 (length (path/basename url-path)))))
         (def abs-path (path/posix/join url-path-dir path))
-        (string url-scheme "://" url-host "/" abs-path  ".hpkg")))))
+        (string url-scheme "://" url-host "/" abs-path ".hpkg")))))
 
 (defn- load-hpkg-path
   [path args]
@@ -101,9 +101,8 @@
   (def saved-process-env (save-process-env))
   (def saved-root-env (merge-into @{} root-env))
   (def saved-mod-loaders (merge-into @{} module/loaders))
-  (def saved-mod-paths  (array ;module/paths))
-  (def saved-mod-cache  (merge-into @{} module/cache))
-  
+  (def saved-mod-paths (array ;module/paths))
+  (def saved-mod-cache (merge-into @{} module/cache))
 
   (defer (do
            (clear-table module/cache)
@@ -117,20 +116,20 @@
 
            (clear-table module/loaders)
            (merge-into module/loaders saved-mod-loaders)
-           
+
            (restore-process-env saved-process-env))
-    
+
     (clear-table root-env)
     (merge-into root-env builtins/hermes-env)
 
     # Clear module cache.
     (clear-table module/cache)
-    
+
     (clear-array module/paths)
 
     (put module/loaders :hpkg-url load-hpkg-url)
     (put module/loaders :hpkg-path load-hpkg-path)
-    (array/push module/paths [check-hpkg-url  :hpkg-url])
+    (array/push module/paths [check-hpkg-url :hpkg-url])
     (array/push module/paths [check-hpkg-path :hpkg-path])
     (clear-table builtins/*content-map*)
 
@@ -198,45 +197,43 @@
   (def parsed-args (argparse/argparse ;init-params))
   (unless parsed-args
     (os/exit 1))
-  (def pkgstore-cmd @[
-    "hermes-pkgstore"
-    "init" "-s" *store-path*
-  ])
+  (def pkgstore-cmd @["hermes-pkgstore"
+                      "init" "-s" *store-path*])
   (os/exit (posix-spawn/run pkgstore-cmd)))
 
 (def- build-params
   ["Build a hermes package."
    "module"
-     {:kind :option
-      :short "m"
-      :help "Path to the module in which to run 'expression'."}
+   {:kind :option
+    :short "m"
+    :help "Path to the module in which to run 'expression'."}
    "build-host"
-     {:kind :option
-      :help "Transparently build on a remote host."}
+   {:kind :option
+    :help "Transparently build on a remote host."}
    "expression"
-     {:kind :option
-      :short "e"
-      :help "Expression to build, defaults to the hpkg file name."}
-   "output" 
-     {:kind :option
-      :short "o"
-      :default "./result"
-      :help "Path to where package output link will be created."}
-   "parallelism" 
-      {:kind :option
-       :short "j"
-       :default "1"
-       :help "Pass a parallelism hint to package builders."}
-   "ttl" 
-      {:kind :option
-       :help "Only allow garbage collection of the package after ttl seconds."}
+   {:kind :option
+    :short "e"
+    :help "Expression to build, defaults to the hpkg file name."}
+   "output"
+   {:kind :option
+    :short "o"
+    :default "./result"
+    :help "Path to where package output link will be created."}
+   "parallelism"
+   {:kind :option
+    :short "j"
+    :default "1"
+    :help "Pass a parallelism hint to package builders."}
+   "ttl"
+   {:kind :option
+    :help "Only allow garbage collection of the package after ttl seconds."}
    "debug"
-     {:kind :flag
-      :help "Allow stdin and interactivity during build, build always fails."}
-   "no-out-link" 
-     {:kind :flag
-      :short "n"
-      :help "Do not create an output link."}])
+   {:kind :flag
+    :help "Allow stdin and interactivity during build, build always fails."}
+   "no-out-link"
+   {:kind :flag
+    :short "n"
+    :help "Do not create an output link."}])
 
 (defn- default-expression-from-module
   [mod]
@@ -251,7 +248,7 @@
   (def parsed-args (argparse/argparse ;build-params))
   (unless parsed-args
     (os/exit 1))
-  
+
   (def debug (parsed-args "debug"))
   (def module (parsed-args "module"))
   (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
@@ -300,7 +297,7 @@
                        (string build-host ":" rpkg-path)])
         (eprintf "%j" scp-cmd)
         (sh/$ ;scp-cmd)
-        
+
         (def pkgstore-build-cmd
           @["ssh"
             "-oBatchMode=yes"
@@ -312,11 +309,10 @@
             ;(if (= *store-path* "") [] ["-s" *store-path*])
             ;(if debug ["--debug"] [])
             "-p" rpkg-path
-            "-o" rroot
-            ])
+            "-o" rroot])
 
         (eprintf "%j" pkgstore-build-cmd)
-        
+
         (def result-path-buf @"")
         (def build-exit-code
           (first (sh/run ;pkgstore-build-cmd > ,result-path-buf)))
@@ -357,7 +353,7 @@
 
         (def build-exit-code
           (posix-spawn/run pkgstore-build-cmd))
-        
+
         build-exit-code)))
 
   (:close tmpdir)
@@ -365,29 +361,29 @@
 
 (def- gc-params
   ["Run the package garbage collector."
-    "ignore-ttl" 
-      {:kind :flag
-       :help "Ignore package ttl roots."}])
+   "ignore-ttl"
+   {:kind :flag
+    :help "Ignore package ttl roots."}])
 
 (defn- gc
   []
   (def parsed-args (argparse/argparse ;gc-params))
   (unless parsed-args
     (os/exit 1))
-  
+
   (def pkgstore-cmd
     @["hermes-pkgstore" "gc" "-s" *store-path* ;(if (parsed-args "ignore-ttl") ["--ignore-ttl"] [])])
   (os/exit (posix-spawn/run pkgstore-cmd)))
 
 (def- cp-params
   ["Copy a package closure between package stores."
-   "allow-untrusted" 
-     {:kind :flag
-      :help "Allow the destination to ignore failed trust challenges if run by the store owner."}
+   "allow-untrusted"
+   {:kind :flag
+    :help "Allow the destination to ignore failed trust challenges if run by the store owner."}
    "to-store"
-    {:kind :option
-     :short "t"
-     :help "The store to copy into."}
+   {:kind :option
+    :short "t"
+    :help "The store to copy into."}
    :default {:kind :accumulate}])
 
 (defn- cp
@@ -395,7 +391,7 @@
   (def parsed-args (argparse/argparse ;cp-params))
   (unless parsed-args
     (os/exit 1))
-  
+
   (def nargs (length (parsed-args :default)))
   (unless (or (= 1 nargs)
               (= 2 nargs))
@@ -403,9 +399,7 @@
 
   (def [from to] (parsed-args :default))
 
-  (def ssh-peg (peg/compile ~{
-    :main (* "ssh://" (capture (some (* (not "/") 1)))  (choice (capture (some 1)) (constant nil)))
-  }))
+  (def ssh-peg (peg/compile ~{:main (* "ssh://" (capture (some (* (not "/") 1))) (choice (capture (some 1)) (constant nil)))}))
 
   (def from-cmd
     (if-let [[host from] (peg/match ssh-peg from)]
@@ -422,7 +416,7 @@
           to-store
           *store-path*))
       (def store-args
-        (if (= store-path"")
+        (if (= store-path "")
           []
           ["-s" store-path]))
       (if-let [_ to
@@ -433,52 +427,52 @@
           "--"
           "hermes-pkgstore" "recv"
           ;store-args
-          ;(if to ["-o"  to] [])]
+          ;(if to ["-o" to] [])]
         @["hermes-pkgstore" "recv"
-            ;store-args
-            ;(if to ["-o"  to] [])
-            ;(if (parsed-args "allow-untrusted") ["--allow-untrusted"] [])])))
+          ;store-args
+          ;(if to ["-o" to] [])
+          ;(if (parsed-args "allow-untrusted") ["--allow-untrusted"] [])])))
 
   (def [pipe1< pipe1>] (posix-spawn/pipe))
   (def [pipe2< pipe2>] (posix-spawn/pipe))
 
   (with [send-proc (posix-spawn/spawn from-cmd :file-actions [[:dup2 pipe1> stdout] [:dup2 pipe2< stdin]])]
-  (with [recv-proc (posix-spawn/spawn to-cmd :file-actions [[:dup2 pipe2> stdout] [:dup2 pipe1< stdin]])]
-    
-    (each f [pipe1< pipe1> pipe2< pipe2>] (file/close f))
+    (with [recv-proc (posix-spawn/spawn to-cmd :file-actions [[:dup2 pipe2> stdout] [:dup2 pipe1< stdin]])]
 
-    (let [send-exit (posix-spawn/wait send-proc)
-          recv-exit (posix-spawn/wait recv-proc)]
-      (unless (and (zero? send-exit)
-                   (zero? recv-exit))
-        (error "copy failed"))))))
+      (each f [pipe1< pipe1> pipe2< pipe2>] (file/close f))
+
+      (let [send-exit (posix-spawn/wait send-proc)
+            recv-exit (posix-spawn/wait recv-proc)]
+        (unless (and (zero? send-exit)
+                     (zero? recv-exit))
+          (error "copy failed"))))))
 
 
 (def- show-build-deps-params
   ["Show the dependency DAG for a package as a set of trees."
    "module"
-     {:kind :option
-      :short "m"
-      :help "Path to the module in which to run 'expression'."}
+   {:kind :option
+    :short "m"
+    :help "Path to the module in which to run 'expression'."}
    "expression"
-     {:kind :option
-      :short "e"
-      :help "Expression to show build time dependency tree."}
+   {:kind :option
+    :short "e"
+    :help "Expression to show build time dependency tree."}
    "max-depth"
-     {:kind :option
-      :short "d"
-      :help "Maximum dependency depth to show."}
+   {:kind :option
+    :short "d"
+    :help "Maximum dependency depth to show."}
    "names"
-     {:kind :flag
-      :short "n"
-      :help "When a package has a name, display only the name."}])
+   {:kind :flag
+    :short "n"
+    :help "When a package has a name, display only the name."}])
 
 (defn show-build-deps
   []
   (def parsed-args (argparse/argparse ;show-build-deps-params))
   (unless parsed-args
     (os/exit 1))
-  
+
   (def module (parsed-args "module"))
   (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
   (var pkg (load-pkgs expr module))
@@ -495,21 +489,21 @@
   (each p (dep-info :order)
     # Freeze the packages in order as children must be frozen first.
     (_hermes/pkg-freeze *store-path* builtins/registry p))
-  
+
   (defn- print-dep-tree
     [pkg depth prefix prefix-part]
     (print prefix
-      (if (parsed-args "names")
-        (or (pkg :name) (pkg :hash))
-        (path/basename (pkg :path))))
+           (if (parsed-args "names")
+             (or (pkg :name) (pkg :hash))
+             (path/basename (pkg :path))))
     (when-let [deps (get-in dep-info [:deps pkg])]
       (when (pos? depth)
         (def l (-> deps length dec))
         (eachp [i d] (sorted deps)
           (print-dep-tree
             d (dec depth)
-            (string prefix-part (if (= i l) " └─"  " ├─"))
-            (string prefix-part (if (= i l) "   "  " │ ")))))))
+            (string prefix-part (if (= i l) " └─" " ├─"))
+            (string prefix-part (if (= i l) "   " " │ ")))))))
 
   (print-dep-tree pkg max-depth "" ""))
 
