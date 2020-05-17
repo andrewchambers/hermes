@@ -577,7 +577,8 @@
                            []
                            ["-n"])
                         -- 
-                        hermes-builder -t ,thunk-path)
+                        hermes-builder -t ,thunk-path
+                        < :null)
                 (error "builder failed")))))
 
         # Ensure files have correct owner, clear any permissions except execute.
