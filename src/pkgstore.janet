@@ -572,7 +572,7 @@
 
               (spit-do-build-thunk do-build)
               (unless (sh/$?
-                         hermes-namespace-container -u -m -u -p -i
+                         hermes-namespace-container
                          ;(if allow-network
                            []
                            ["-n"])

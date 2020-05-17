@@ -69,36 +69,25 @@ usage(char *pname)
 {
     fprintf(stderr, "Usage: %s [options] program [arg...]\n", pname);
     fprintf(stderr, "Options can be:\n");
-    fprintf(stderr, "    -C   unshare cgroup namespace\n");
-    fprintf(stderr, "    -i   unshare IPC namespace\n");
-    fprintf(stderr, "    -m   unshare mount namespace\n");
     fprintf(stderr, "    -n   unshare network namespace\n");
-    fprintf(stderr, "    -p   unshare PID namespace\n");
-    fprintf(stderr, "    -u   unshare UTS namespace\n");
     exit(1);
 }
 
-static volatile sig_atomic_t SIGINT_ctr = 0;
-static volatile sig_atomic_t SIGHUP_ctr = 0;
-static volatile sig_atomic_t SIGQUIT_ctr = 0;
-static volatile sig_atomic_t SIGTERM_ctr = 0;
-static volatile sig_atomic_t SIGUSR1_ctr = 0;
-static volatile sig_atomic_t SIGUSR2_ctr = 0;
+static volatile sig_atomic_t outside_signal = 0;
 
 static void sighandler(int signo, siginfo_t *siginfo, void *context) {
-#define SIG_INC_CTR_CASE(X) case X: if (X##_ctr != SIG_ATOMIC_MAX) ++(X##_ctr); break
-    switch (signo) {
-        SIG_INC_CTR_CASE(SIGINT);
-        SIG_INC_CTR_CASE(SIGHUP);
-        SIG_INC_CTR_CASE(SIGTERM);
-        SIG_INC_CTR_CASE(SIGQUIT);
-        SIG_INC_CTR_CASE(SIGUSR1);
-        SIG_INC_CTR_CASE(SIGUSR2);
+    if (signo != SIGALRM) {
+        outside_signal = 1;
     }
-#undef SIG_INC_CTR_CASE
 }
 
-static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
+static void fork_child(void (*child_continuation)(void)) {
+
+    /* We want to die if the pkgstore process dies
+       SIGTERM means we can send SIGKILL to the child.
+     */
+    if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0)
+        die("prctl");
 
     pid_t pid;
     int sync[2];
@@ -125,6 +114,10 @@ static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
         sigaddset(&masked_signals, SIGALRM);
         sigaddset(&masked_signals, SIGUSR1);
         sigaddset(&masked_signals, SIGUSR2);
+        sigaddset(&masked_signals, SIGCONT);
+        sigaddset(&masked_signals, SIGTSTP);
+        sigaddset(&masked_signals, SIGTTIN);
+        sigaddset(&masked_signals, SIGTTOU);
 
         act.sa_sigaction = &sighandler;
         act.sa_flags = SA_SIGINFO;
@@ -136,7 +129,11 @@ static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
                 || (sigaction(SIGTERM, &act, NULL) < 0)
                 || (sigaction(SIGALRM, &act, NULL) < 0)
                 || (sigaction(SIGUSR1, &act, NULL) < 0)
-                || (sigaction(SIGUSR2, &act, NULL) < 0)) {
+                || (sigaction(SIGUSR2, &act, NULL) < 0)
+                || (sigaction(SIGCONT, &act, NULL) < 0)
+                || (sigaction(SIGTSTP, &act, NULL) < 0)
+                || (sigaction(SIGTTIN, &act, NULL) < 0)
+                || (sigaction(SIGTTOU, &act, NULL) < 0)) {
             die("sigaction");
         }
 
@@ -145,25 +142,14 @@ static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
 
         while (1) {
 
-            sigset_t restore_mask;
-            if(sigprocmask(SIG_BLOCK, &masked_signals, &restore_mask) != 0)
-                die("sigprocmask");
-
-#define FWDSIG(X) while (X##_ctr) { kill(pid, X); X##_ctr--; }
-            FWDSIG(SIGINT);
-            FWDSIG(SIGHUP);
-            FWDSIG(SIGQUIT);
-            FWDSIG(SIGTERM);
-            FWDSIG(SIGUSR1);
-            FWDSIG(SIGUSR2);
-#undef FWDSIG
-
-            if(sigprocmask(SIG_SETMASK, &restore_mask, NULL) != 0)
-                die("sigprocmask");
+            if (outside_signal) {
+                // If a signal arrived, we should kill the child and wait for it.
+                kill(pid, SIGKILL);
+            }
 
             // XXX This SIGALRM is used for the case a signal
-            // arrived in the window between forwarding signals
-            // and waiting. In that cause we could have an unforwarded
+            // arrived in the window between last loop iteration and waiting.
+            // In that cause we could have an undetected
             // signal like SIGTERM and everything deadlocks...
             alarm(1);
 
@@ -178,7 +164,13 @@ static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
                 }
                 if (rc == pid) {
                     if (WIFEXITED(status)) {
-                        exit(WEXITSTATUS(status));
+                        int status = WEXITSTATUS(status);
+                        // If we got a signal, we should treat
+                        // this like a build failure. We can't allow
+                        // interactive users to influence builds.
+                        if (status == 0 && outside_signal)
+                            status = 127;
+                        exit(status);
                     } else if (WIFSIGNALED(status)) {
                         // XXX Function of termsig signal?
                         exit(127);
@@ -188,9 +180,6 @@ static void fork_child_and_forward_signals(void (*child_continuation)(void)) {
         }
     } else {
         xclose(sync[0]);
-        /* Kill child if we are killed somehow. */
-        if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
-            die("prctl");
         xwrite1(sync[1], 'x');
         xclose(sync[1]);
         child_continuation();
@@ -207,36 +196,21 @@ static void exec_child(void) {
 }
 
 static void pid1(void) {
-    fork_child_and_forward_signals(exec_child);
+    fork_child(exec_child);
     exit(1);
 }
 
 int
 main(int argc, char *argv[])
 {
-    int flags, opt;
+    int unshare_flags, opt;
 
-    flags = 0;
+    unshare_flags = CLONE_NEWIPC|CLONE_NEWUTS|CLONE_NEWNS|CLONE_NEWPID;
 
-    while ((opt = getopt(argc, argv, "Cimnpu")) != -1) {
+    while ((opt = getopt(argc, argv, "n")) != -1) {
         switch (opt) {
-        case 'C':
-            flags |= CLONE_NEWCGROUP;
-            break;
-        case 'i':
-            flags |= CLONE_NEWIPC;
-            break;
-        case 'm':
-            flags |= CLONE_NEWNS;
-            break;
         case 'n':
-            flags |= CLONE_NEWNET;
-            break;
-        case 'p':
-            flags |= CLONE_NEWPID;
-            break;
-        case 'u':
-            flags |= CLONE_NEWUTS;
+            unshare_flags |= CLONE_NEWNET;
             break;
         default:
             usage(argv[0]);
@@ -249,16 +223,11 @@ main(int argc, char *argv[])
     child_argv0 = argv[optind];
     child_argv = &argv[optind];
 
-    if (unshare(flags) == -1)
+    if (unshare(unshare_flags) == -1)
         die("unshare");
 
-    if (flags & CLONE_NEWNS)
-      // We don't want mounts to propagate out of our container.
-      if (mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL) == -1)
+    if (mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL) == -1)
         die("mount propagatation");
 
-    if ((flags & CLONE_NEWPID))
-        fork_child_and_forward_signals(pid1);
-    else
-        exec_child();
+    fork_child(pid1);
 }
