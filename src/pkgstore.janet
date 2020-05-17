@@ -476,6 +476,7 @@
       (fn run-builder
         [pkg]
         (eprintf "building %s..." (pkg :path))
+        
         (when (os/stat (pkg :path))
           (_hermes/nuke-path (pkg :path)))
         
@@ -490,16 +491,14 @@
             (spit thunk-path (marshal do-build registry))
             (put registry (pkg :builder) '*pkg-noop-build*))
           
-          # network allowed if content specified, nothing downloaded
-          # can alter the package outcome.
-          (def allow-network (truthy? (pkg :content)))
+          (def allow-fetch (truthy? (pkg :content)))
 
           (if (= store-mode :single-user)
             (do
               (def build-dir (string (tmpdir :path) "/build"))
               (os/mkdir build-dir)
               (def fetch-socket-path
-                (if allow-network
+                (if allow-fetch
                   fetch-socket-path
                   (string (tmpdir :path) "/bad.sock")))
               # No sandbox at all for single user mode.
@@ -518,7 +517,9 @@
                         (pkg-builder))))
                   (make-builder (pkg :path) (pkg :builder) build-dir fetch-socket-path parallelism)))
               (spit-do-build-thunk do-build)
-              (unless (sh/$? hermes-builder -t ,thunk-path)
+              (unless (sh/$? 
+                         hermes-builder -t ,thunk-path
+                         ;(if (= pkg pkg-to-debug) [] [:< :null :> [stdout stderr]]))
                 (error "builder failed")))
             (do
               # chrooted sandbox build for multi user store.
@@ -559,7 +560,7 @@
               (def do-build 
                 # wrapper to minimize closure over capturing.
                 (do
-                  (defn make-builder [chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-network]
+                  (defn make-builder [chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-fetch]
                     (fn do-build []
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
@@ -579,17 +580,15 @@
                                   :parallelism parallelism
                                   :fetch-socket "/tmp/fetch.sock"]
                         (pkg-builder))))
-                  (make-builder chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-network)))
+                  (make-builder chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-fetch)))
 
               (spit-do-build-thunk do-build)
               (unless (sh/$?
-                         hermes-namespace-container
-                         ;(if allow-network
-                           []
-                           ["-n"])
+                        hermes-namespace-container
+                        -n
                         -- 
                         hermes-builder -t ,thunk-path
-                        ;(if (= pkg pkg-to-debug) [] [:< :null])) # if debug, we allow stdin
+                        ;(if (= pkg pkg-to-debug) [] [:< :null :> [stdout stderr]]))
                 (error "builder failed")))))
 
         # Ensure files have correct owner, clear any permissions except execute.
