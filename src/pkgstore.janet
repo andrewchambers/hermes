@@ -16,9 +16,12 @@
 (var- *store-config* nil)
 (var- *store-owner-uid* nil)
 (var- *store-owner-gid* nil)
+(var- *store-user-uid* nil)
+(var- *store-user-gid* nil)
+
 
 (defn open-pkg-store
-  [store-path]
+  [store-path user-info]
 
   (set *store-path* (if (= store-path "")
                       ""
@@ -29,14 +32,6 @@
   (def gid (_hermes/getgid))
   (def euid (_hermes/geteuid))
   (def egid (_hermes/getegid))
-  
-  # setuid mode should only be used for a multi-user store
-  # at the root path. We cannot allow non root users to
-  # access other stores as this creates opportunities for bugs...
-  # https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use
-  (when (and (zero? euid) (not (zero? uid)))
-    (unless (empty? *store-path*)
-      (error "non root user using setuid pkgstore to access non multi-user store")))
 
   (def cfg-path (string *store-path* "/etc/hermes/cfg.jdn"))
   (def cfg-stat (os/lstat cfg-path))
@@ -47,6 +42,8 @@
   (set *store-config* (jdn/decode (slurp cfg-path)))
   (set *store-owner-uid* (cfg-stat :uid))
   (set *store-owner-gid* (cfg-stat :gid))
+  (set *store-user-uid* (user-info :uid))
+  (set *store-user-gid* (user-info :gid))
 
   (case (*store-config* :mode)
     :single-user
@@ -63,12 +60,16 @@
           (error "multi-user stores can only be rooted at /"))
         (unless (and (= *store-owner-uid* 0) (= *store-owner-gid* 0))
           (error "multi-user store must be root owned"))
+        (unless (= uid 0)
+          (error "uid must be root when opening a multi-user store"))
+        (unless (= gid 0)
+          (error "gid must be root when opening a multi-user store"))
         (unless (= euid 0)
           (error "euid must be root when opening a multi-user store"))
         (unless (= egid 0)
           (error "egid must be root when opening a multi-user store"))
         
-        (let [user-name ((_hermes/getpwuid uid) :name)
+        (let [user-name ((_hermes/getpwuid *store-user-uid*) :name)
               authorized-group-info (_hermes/getgrnam (get *store-config* :authorized-group "root"))]
           (unless (or (= "root" user-name)
                       (find  |(= $ user-name) (authorized-group-info :members)))
@@ -389,8 +390,15 @@
 (defn add-root
   [db pkg-path root]
   (def root (path/abspath root))
-  (with [old-euid (_hermes/geteuid) _hermes/seteuid]
-    (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
+  (sqlite3/eval db "insert or ignore into Roots(LinkPath) Values(:root);" {:root root})
+
+  (def old-euid (_hermes/geteuid))
+  (def old-egid (_hermes/getegid))
+
+  (defer (do (_hermes/seteuid old-euid)
+             (_hermes/setegid old-egid))
+    (_hermes/setegid *store-user-gid*)
+    (_hermes/seteuid *store-user-uid*)
     (def tmplink (string root ".hermes-root"))
     (when (os/stat tmplink)
       (os/rm tmplink))

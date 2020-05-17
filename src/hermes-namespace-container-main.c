@@ -164,13 +164,13 @@ static void fork_child(void (*child_continuation)(void)) {
                 }
                 if (rc == pid) {
                     if (WIFEXITED(status)) {
-                        int status = WEXITSTATUS(status);
+                        int exit_code = WEXITSTATUS(status);
                         // If we got a signal, we should treat
                         // this like a build failure. We can't allow
                         // interactive users to influence builds.
-                        if (status == 0 && outside_signal)
-                            status = 127;
-                        exit(status);
+                        if (exit_code == 0 && outside_signal)
+                            exit_code = 127;
+                        exit(exit_code);
                     } else if (WIFSIGNALED(status)) {
                         // XXX Function of termsig signal?
                         exit(127);

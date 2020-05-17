@@ -5,6 +5,20 @@
 (import ./version)
 (import ../build/_hermes)
 
+# N.B Some important notes about security of the package store:
+#
+# This program is setuid root to allow users to run builds via
+# the build sandbox.
+#
+# In multi user store builds we run as root. This means we must be 
+# careful about how terminal signals are dealt with, and the 
+# relation between the terminal, the build sandbox process and
+# this process.
+#
+# If we are not supposed to be root as the package store
+# is not a store at the root path, we drop privs as soon
+# as we can.
+
 
 (defn die [& args]
   (eprint (string ;args))
@@ -18,6 +32,15 @@
   (_hermes/setgid gid)
   (_hermes/setuid uid)
   (_hermes/seteuid uid))
+
+(defn become-root
+  []
+  (_hermes/setgid 0)
+  (_hermes/setuid 0))
+
+(defn get-user-info []
+  {:uid (_hermes/getuid)
+   :gid (_hermes/getgid)})
 
 (defn- unknown-command
   []
@@ -90,10 +113,13 @@
   
   (def store (parsed-args "store"))
   
-  (unless (= store "")
+  (def user-info (get-user-info))
+
+  (if (= store "")
+    (become-root)
     (drop-setuid+setgid-privs))
 
-  (pkgstore/open-pkg-store store)
+  (pkgstore/open-pkg-store store user-info)
 
   (def pkg (unmarshal (slurp (parsed-args "package")) builtins/load-registry))
 
@@ -160,10 +186,13 @@
 
   (def store (parsed-args "store"))
 
-  (unless (= store "")
+  (def user-info (get-user-info))
+
+  (if (= store "")
+    (become-root)
     (drop-setuid+setgid-privs))
 
-  (pkgstore/open-pkg-store store)
+  (pkgstore/open-pkg-store store user-info)
 
   (pkgstore/gc :ignore-ttl (parsed-args "ignore-ttl")))
 
@@ -190,12 +219,14 @@
 
   (def store (string/slice hpkg-dir 0 -6))
 
-  (unless (= store "")
+  (def user-info (get-user-info))
+
+  (if (= store "")
+    (become-root)
     (drop-setuid+setgid-privs))
 
-  (pkgstore/open-pkg-store store)
+  (pkgstore/open-pkg-store store user-info)
   (pkgstore/send-pkg-closure stdout stdin package))
-
 
 (def- recv-params
   ["Receive a package closure sent over stdin/stdout with the send/recv protocol."
@@ -221,10 +252,14 @@
 
   (def store (parsed-args "store"))
 
-  (unless (= store "")
+  (def user-info (get-user-info))
+
+  (if (= store "")
+    (become-root)
     (drop-setuid+setgid-privs))
 
-  (pkgstore/open-pkg-store store)
+  (pkgstore/open-pkg-store store user-info)
+
   (pkgstore/recv-pkg-closure
     stdout stdin (parsed-args "output") :allow-untrusted (parsed-args "allow-untrusted")))
 
