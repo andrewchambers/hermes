@@ -458,23 +458,28 @@
               (set deps-ready (and (build-pkg dep) deps-ready)))
             
               (if-let [_ deps-ready
-                       flock (acquire-build-lock (pkg :hash) :noblock :exclusive)]
-                (defer (:close flock)
+                       build-lock (acquire-build-lock (pkg :hash) :noblock :exclusive)]
+                (defer (flock/release build-lock)
+                  # N.B. We want the file lock to be preserved in the build agent.
+                  # This prevents another builder from even running if the pkgstore process
+                  # dies for some reason.
+                  (_hermes/fd-set-cloexec (flock/fileno build-lock) false)
+                  
                   # After aquiring the package lock, check again that it doesn't exist.
                   # This is in case multiple builders were waiting, and another did the build.
                   (when (not (has-pkg-with-hash db (pkg :hash)))
-                    (run-builder pkg))
+                    (run-builder build-lock pkg))
                   true)
                 false))))
       (when pkg-ready
-        # The package should no longer marshal as a circular reference.
+        # The package should no longer marshal as '*circular-reference*'.
         # as we know all it/all of it's dependencies are on disk.
         (put registry pkg nil))
       pkg-ready)
     
     (set run-builder 
       (fn run-builder
-        [pkg]
+        [build-lock pkg]
         (eprintf "building %s..." (pkg :path))
         
         (when (os/stat (pkg :path))
@@ -560,8 +565,12 @@
               (def do-build 
                 # wrapper to minimize closure over capturing.
                 (do
-                  (defn make-builder [chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-fetch]
+                  (defn make-builder [build-lock-fd chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-fetch]
                     (fn do-build []
+                      # N.B. We passed the builder lock fd to our child processes, but
+                      # we close it here so the builder function can't influence our build.
+                      # all are killed, preventing store races in crazy.
+                      (_hermes/fd-close build-lock-fd)
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
                       (_hermes/cleargroups)
@@ -580,7 +589,7 @@
                                   :parallelism parallelism
                                   :fetch-socket "/tmp/fetch.sock"]
                         (pkg-builder))))
-                  (make-builder chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-fetch)))
+                  (make-builder (flock/fileno build-lock) chroot hpkg (pkg :path) (pkg :builder) parallelism (build-user :uid) (build-user :gid) allow-fetch)))
 
               (spit-do-build-thunk do-build)
               (unless (sh/$?

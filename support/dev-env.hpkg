@@ -55,8 +55,8 @@
 
 (defsrc janet-flock-src
   :file-name "janet-flock.tar.gz"
-  :url "https://github.com/andrewchambers/janet-flock/tarball/f3be59315f50ca1876a2247704d5fc7250f1705f"
-  :hash "sha256:75e79cdecd05fe7864a6b0787326a6225e04e7f304007134c44d1aa5c42bf728")
+  :url "https://github.com/andrewchambers/janet-flock/tarball/3ec2f6e3345f347dc9d22b0aeea2e1b445ae8027"
+  :hash "sha256:4c0e24e675ebce6ce4cdb1ad226c7b6bb334495f2a74b4c45f29017d9fe229a1")
 
 (defsrc janet-fork-src
   :file-name "janet-fork.tar.gz"

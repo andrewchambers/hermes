@@ -83,12 +83,6 @@ static void sighandler(int signo, siginfo_t *siginfo, void *context) {
 
 static void fork_child(void (*child_continuation)(void)) {
 
-    /* We want to die if the pkgstore process dies
-       SIGTERM means we can send SIGKILL to the child.
-     */
-    if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0)
-        die("prctl");
-
     pid_t pid;
     int sync[2];
 
@@ -203,6 +197,12 @@ static void pid1(void) {
 int
 main(int argc, char *argv[])
 {
+    /* We want to die if the pkgstore process dies
+       SIGTERM means we can still kill the child.
+    */
+    if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0)
+        die("prctl");
+
     int unshare_flags, opt;
 
     unshare_flags = CLONE_NEWIPC|CLONE_NEWUTS|CLONE_NEWNS|CLONE_NEWPID;

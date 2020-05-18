@@ -114,3 +114,5 @@ Janet unix_connect(int argc, Janet *argv);
 Janet nuke_path(int argc, Janet *argv);
 Janet jmount(int argc, Janet *argv);
 Janet jsync(int argc, Janet *argv);
+Janet jfd_set_cloexec(int argc, Janet *argv);
+Janet jfd_close(int argc, Janet *argv);

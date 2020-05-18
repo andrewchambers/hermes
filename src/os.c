@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <sys/mount.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "fts.h"
 
 
@@ -405,5 +406,20 @@ Janet jsync(int argc, Janet *argv)
     (void)argv;
     janet_fixarity(argc, 0);
     sync();
+    return janet_wrap_nil();
+}
+
+Janet jfd_set_cloexec(int argc, Janet *argv) {
+    janet_fixarity(argc, 2);
+    int fd = janet_getnumber(argv, 0);
+    if (fcntl(fd, F_SETFD, janet_getboolean(argv, 1) ? FD_CLOEXEC : 0) < 0)
+      janet_panicf("unable to alter fd cloexec - %s", strerror(errno));
+    return janet_wrap_nil();
+}
+
+Janet jfd_close(int argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+    if (close(janet_getnumber(argv, 0)) < 0)
+      janet_panicf("unable to close fd - %s", strerror(errno));
     return janet_wrap_nil();
 }

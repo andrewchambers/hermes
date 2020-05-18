@@ -208,6 +208,8 @@ static const JanetReg cfuns[] = {
     {"nuke-path", nuke_path, NULL},
     {"mount", jmount, NULL},
     {"sync", jsync, NULL},
+    {"fd-set-cloexec", jfd_set_cloexec, NULL},
+    {"fd-close", jfd_close, NULL},
     {NULL, NULL, NULL}
 };
 
