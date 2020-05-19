@@ -37,7 +37,9 @@ Hermes also provides some nifty features:
 
 ## What does using Hermes look like?
 
-See the [quickstart guide](./doc/quick-start/quick-start.md).
+- See the [quickstart guide](./doc/quick-start/quick-start.md).
+- Browse some package definitions [here](https://github.com/andrewchambers/hpkgs).
+
 
 ## Does Hermes replace my language package manager like npm,jpm,cargo,pip... ?
 
