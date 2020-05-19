@@ -109,9 +109,6 @@ Browse the latest manual at:
     :short "j"
     :default "1"
     :help "Pass a parallelism hint to package builders."}
-   "ttl"
-   {:kind :option
-    :help "Only allow garbage collection of the package after ttl seconds."}
    "debug"
    {:kind :flag
     :help "Allow stdin and interactivity during build, build always fails."}
@@ -148,11 +145,6 @@ Browse the latest manual at:
   (def parallelism (or (scan-number (parsed-args "parallelism"))
                        (error "expected a number for --parallelism")))
 
-  (def ttl
-    (when (parsed-args "ttl")
-      (or (scan-number (parsed-args "ttl"))
-          (error "expected a number of seconds for --ttl"))))
-
   (def fetch-socket-path (parsed-args "fetch-socket-path"))
   ((fn configure-fetch-socket
      [&opt nleft]
@@ -181,16 +173,12 @@ Browse the latest manual at:
     :fetch-socket-path fetch-socket-path
     :gc-root (unless (parsed-args "no-out-link") (parsed-args "output"))
     :parallelism parallelism
-    :ttl ttl
     :debug debug)
 
   (print (pkg :path)))
 
 (def- gc-params
   ["Run the package garbage collector."
-   "ignore-ttl"
-   {:kind :flag
-    :help "Ignore package ttl roots."}
    "store"
    {:kind :option
     :short "s"
@@ -214,7 +202,7 @@ Browse the latest manual at:
 
   (pkgstore/open-pkg-store store user-info)
 
-  (pkgstore/gc :ignore-ttl (parsed-args "ignore-ttl")))
+  (pkgstore/gc))
 
 (def- send-params
   ["Send a package closure over stdin/stdout with the send/recv protocol."

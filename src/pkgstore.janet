@@ -160,7 +160,7 @@
       (sqlite3/eval db "begin transaction;")
       (when (empty? (sqlite3/eval db "select name from sqlite_master where type='table' and name='Meta'"))
         (sqlite3/eval db "create table Roots(LinkPath text primary key);")
-        (sqlite3/eval db "create table Pkgs(Hash text primary key, Name text, TTLExpires integer);")
+        (sqlite3/eval db "create table Pkgs(Hash text primary key, Name text);")
         (sqlite3/eval db "create table Meta(Key text primary key, Value text);")
         (sqlite3/eval db "insert into Meta(Key, Value) Values('StoreVersion', 1);")
         (sqlite3/eval db "commit;"))))
@@ -228,21 +228,12 @@
   (has-pkg-with-hash db hash))
 
 (defn gc
-  [&keys {
-    :ignore-ttl ignore-ttl
-  }]
+  []
   (assert *store-config*)
   (with [gc-lock (acquire-gc-lock :block :exclusive)]
   (with [db (open-db)]
 
     (def root-pkg-paths @[])
-
-    (defn process-ttl-roots
-      []
-      (each row (sqlite3/eval db
-                   "select * from Pkgs where TTLExpires is not null and TTLExpires > :now;"
-                   {:now (os/time)})
-        (array/push root-pkg-paths (pkg-path-from-parts (row :Hash) (row :Name)))))
 
     (defn process-roots
       []
@@ -261,8 +252,6 @@
         (sqlite3/eval db "delete from Roots where LinkPath = :root;" {:root root}))
       (sqlite3/eval db "commit;"))
     
-    (unless ignore-ttl
-      (process-ttl-roots))
     (process-roots)
     (def visited (walkpkgstore/walk-store-closure root-pkg-paths))
 
@@ -411,7 +400,6 @@
      :fetch-socket-path fetch-socket-path
      :gc-root gc-root
      :parallelism parallelism
-     :ttl ttl
      :debug debug
    }]
   (assert *store-config*)
@@ -644,10 +632,6 @@
       # TODO exp backoffs.
       (eprintf "waiting for more work...")
       (os/sleep 0.5))
-
-    (when ttl
-      (sqlite3/eval db "Update Pkgs set TTLExpires = :expires where Hash = :hash;"
-        {:hash (pkg :hash) :expires (+ (os/time) ttl)}))
 
     (when gc-root
       (add-root db (pkg :path) gc-root)))))

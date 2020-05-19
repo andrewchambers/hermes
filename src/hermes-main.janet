@@ -235,9 +235,6 @@ Browse the latest manual at:
     :short "j"
     :default "1"
     :help "Pass a parallelism hint to package builders."}
-   "ttl"
-   {:kind :option
-    :help "Only allow garbage collection of the package after ttl seconds."}
    "debug"
    {:kind :flag
     :help "Allow stdin and interactivity during build, build always fails."}
@@ -339,7 +336,6 @@ Browse the latest manual at:
               ["./result"])))
 
         (:close fetch-proxy)
-        # XXX add ttl to cp
         (def cp-cmd
           @["hermes" "cp" (string "ssh://" build-host rroot) ;cp-target-args])
         (eprintf "%j" cp-cmd)
@@ -359,7 +355,6 @@ Browse the latest manual at:
             "-p" pkg-path
             ;(if debug ["--debug"] [])
             ;(if (parsed-args "no-out-link") ["-n"] [])
-            ;(if-let [ttl (parsed-args "ttl")] ["--ttl" ttl] [])
             ;(if-let [output (parsed-args "output")] ["--output" output] [])])
 
         (def build-exit-code
@@ -371,10 +366,7 @@ Browse the latest manual at:
   (os/exit exit-status))
 
 (def- gc-params
-  ["Run the package garbage collector."
-   "ignore-ttl"
-   {:kind :flag
-    :help "Ignore package ttl roots."}])
+  ["Run the package garbage collector."])
 
 (defn- gc
   []
@@ -383,7 +375,7 @@ Browse the latest manual at:
     (os/exit 1))
 
   (def pkgstore-cmd
-    @["hermes-pkgstore" "gc" "-s" *store-path* ;(if (parsed-args "ignore-ttl") ["--ignore-ttl"] [])])
+    @["hermes-pkgstore" "gc" "-s" *store-path*])
   (os/exit (posix-spawn/run pkgstore-cmd)))
 
 (def- cp-params
