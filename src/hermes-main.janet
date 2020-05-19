@@ -185,9 +185,20 @@
 
 (defn- unknown-command
   []
-  (eprintf "unknown command: %v" (get (dyn :args) 0))
-  (os/exit 1))
+  (eprintf `
 
+Invalid command %v, valid commands are:
+
+  init, build, gc, cp, show-build-deps, version
+
+For detailed help and examples, try 'man hermes-COMMAND'.
+
+Browse the latest manual at:
+
+  https://github.com/andrewchambers/hermes/blob/master/doc/man/hermes.1.md
+
+` (get (dyn :args) 0 ""))
+  (os/exit 1))
 
 (def- init-params
   ["Init the hermes package store."])

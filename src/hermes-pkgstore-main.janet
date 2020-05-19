@@ -44,8 +44,23 @@
 
 (defn- unknown-command
   []
-  (die
-    (string/format "unknown command: %v" ((dyn :args) 0))))
+  (eprintf `
+
+Invalid command %v, valid commands are:
+
+  init, build, gc, send, recv, version
+
+Note that hermes-pkgstore is a low level command, normally you
+should interact with hermes via the 'hermes' command.
+
+For detailed help and examples, try 'man hermes-pkgstore-COMMAND'.
+
+Browse the latest manual at:
+
+  https://github.com/andrewchambers/hermes/blob/master/doc/man/hermes-pkgstore.1.md
+
+` (get (dyn :args) 0 ""))
+  (os/exit 1))
 
 (def- init-params
   ["Init the hermes package store."
