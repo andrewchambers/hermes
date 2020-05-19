@@ -1,9 +1,9 @@
 hermes-build(1) 
-============
+==============
 
 ## SYNOPSIS
 
-`hermes` build [MODULE]
+`hermes` build `[options...]` `[MODULE]`
 
 ## DESCRIPTION
 
@@ -21,10 +21,10 @@ and limited file access is proxied back to localhost, meaning although the remot
 perform the build, some `fetch` requests may occur on the local machine.
 
 When using the global package store, builds are performed in a sandbox by a build user on the current user's behalf. When
-hermes is using a single user package store, builds are performed as that user with little or no isolation.
+hermes is using a single user package store, builds are performed as that user with little or no sandboxing.
 
 It is safe to run `hermes build` many times concurrently, even building the same package. Either `hermes build` will divide
-work evenly between build, or will wait until it is able to continue.
+work evenly between build processes, or will wait until it is able to continue.
 
 ## OPTIONS
 
