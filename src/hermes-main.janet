@@ -220,7 +220,7 @@ Browse the latest manual at:
     :help "Path to the module in which to run 'expression'."}
    "build-host"
    {:kind :option
-    :help "Transparently build on a remote host."}
+    :help "Build on a remote host and copy the package back."}
    "expression"
    {:kind :option
     :short "e"
@@ -234,7 +234,7 @@ Browse the latest manual at:
    {:kind :option
     :short "j"
     :default "1"
-    :help "Pass a parallelism hint to package builders."}
+    :help "Pass a parallelism hint to package build functions."}
    "debug"
    {:kind :flag
     :help "Allow stdin and interactivity during build, build always fails."}
