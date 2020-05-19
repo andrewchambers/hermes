@@ -3,20 +3,31 @@ hermes-cp(1)
 
 ## SYNOPSIS
 
-`hermes cp [options...] FROM TO`
+`hermes cp [options...] FROM [TO]`
 
 ## DESCRIPTION
 
-`hermes cp` copies a package and it's dependencies between package stores.
+`hermes cp` copies a package pointed to by the package link `FROM` and create a new package link `TO`,
+potentially to different package stores. The path to the receiving package store defaults to HERMES_STORE
+or is taken from the `--to-store` argument if specified. If the TO link is omitted, the package is sent to the
+--to-store without creating a package link. If a `TO` link is created, it is saved by the receiving package
+store as and prevents packages from being garbage collected until deleted.
 
-The hermes cp command copies packages by connecting an instance of hermes-pkgstore-send(1) to an instance of 
-hermes-pkgstore-recv(1). This copy can take place over ssh if the FROM or TO argument is prefixed with `ssh://`.
+The copy will take place via ssh(1) if either the FROM or TO argument is prefixed with `ssh://`.
+Internally `hermes cp` operates by connecting an instance of hermes-pkgstore-send(1) to an instance of 
+hermes-pkgstore-recv(1), so the hermes-pkgstore(1) command must be in the PATH for both the send
+host and recv host.
 
-If a package already on the destination host, the cp will skip sending the package. Sending packages is atomic
-and is safe to resume on network interruption.
+If a package already on the destination host, the cp will skip sending the package, but still create the `TO` link.
+Sending packages is done atomically, and therefore is crash safe and also safe to retry after network interruption.
 
-To ensure package security, the receiving package store must have the public key of the sending package store added
-to it's set of trusted store keys.
+To ensure package store integrity, the receiving package store must have
+the public key of the sending package store added to it's set of trusted store keys (see hermes-package-store(7)).
+The `--allow-untrusted` option can be passed to `hermes cp` by the owner of the destination store owner to bypass this check.
+
+The store path of the FROM and TO stores may differ, but if they do differ,
+packages may not be runnable in place as absolute PATH references will not be correct.
+This use case is generally used for intermediate package transfers.
 
 ## OPTIONS
 
@@ -32,17 +43,22 @@ to it's set of trusted store keys.
 
 ## EXAMPLES
 
-### localhost to remote host
+### create a new package link
+```
+$ hermes cp ./my-package ./some-other-store
+```
+
+### local store to remote store
 ```
 $ hermes cp ./my-package ssh://my-server.com/home/me/my-package
 ```
 
-### remote host to local host
+### remote store to local store
 ```
 $ hermes cp ssh://my-server.com/home/me/my-package ./my-package
 ```
 
-### between hosts
+### remote store to remote store
 ```
 $ hermes cp ssh://my-server1.com/package ssh://my-server2.com/package
 ```
