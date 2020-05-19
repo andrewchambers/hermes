@@ -3,7 +3,7 @@ hermes-cp(1)
 
 ## SYNOPSIS
 
-`hermes` cp `[options...]` `FROM` `TO`
+`hermes cp [options...] FROM TO`
 
 ## DESCRIPTION
 
