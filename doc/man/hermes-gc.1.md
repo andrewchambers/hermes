@@ -3,7 +3,7 @@ hermes-gc(1)
 
 ## SYNOPSIS
 
-`hermes` gc 
+`hermes gc`
 
 ## DESCRIPTION
 

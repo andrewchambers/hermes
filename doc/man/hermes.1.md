@@ -3,12 +3,12 @@ hermes(1) - Software Environment Manager
 
 ## SYNOPSIS
 
-`hermes` init<br>
-`hermes` build<br>
-`hermes` gc<br>
-`hermes` cp<br>
-`hermes` show-build-deps<br>
-`hermes` version<br>
+`hermes init`<br>
+`hermes build`<br>
+`hermes gc`<br>
+`hermes cp`<br>
+`hermes show-build-deps`<br>
+`hermes version`<br>
 
 ## DESCRIPTION
 

@@ -3,7 +3,7 @@ hermes-init(1)
 
 ## SYNOPSIS
 
-`hermes` init 
+`hermes init `
 
 ## DESCRIPTION
 
