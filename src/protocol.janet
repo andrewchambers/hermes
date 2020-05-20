@@ -46,7 +46,6 @@
       (send-file-chunks)))
   (send-file-chunks))
 
-
 (defn recv-file
   [f recv-to]
   (def buf @"")
@@ -61,46 +60,3 @@
           (file/write recv-to buf)
           (recv-file-chunks))))
   (recv-file-chunks))
-
-(defn send-dir
-  [f path]
-  (def [p1 p2] (posix-spawn/pipe))
-  (def wd (os/cwd))
-  (defer (do
-           (os/cd wd)
-           (file/close p1)
-           (file/close p2))
-    (os/cd path)
-    (with [tar (posix-spawn/spawn
-                  ["hermes-minitar"
-                   "-c"
-                   "-z"
-                   "-f" "-"
-                   "."]
-                  :file-actions [[:dup2 p2 stdout]])]
-      (file/close p2)
-      (send-file f p1)
-      (unless (zero? (posix-spawn/wait tar))
-        (error "sending directory failed")))))
-
-(defn recv-dir
-  [f path]
-  (def wd (os/cwd))
-  (os/mkdir path)
-  (def [p1 p2] (posix-spawn/pipe))
-  (defer (do
-           (os/cd wd)
-           (file/close p1)
-           (file/close p2))
-    (os/cd path)
-    (with [tar (posix-spawn/spawn
-                  ["hermes-minitar"
-                   "-x"
-                   "-z"
-                   "-f" "-"]
-                  :file-actions [[:dup2 p1 stdin]])]
-      (file/close p1)
-      (recv-file f p2)
-      (file/close p2)
-      (unless (zero? (posix-spawn/wait tar))
-        (error "receiving directory failed")))))

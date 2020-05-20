@@ -380,9 +380,6 @@ Browse the latest manual at:
 
 (def- cp-params
   ["Copy a package closure between package stores."
-   "allow-untrusted"
-   {:kind :flag
-    :help "Allow the destination to ignore failed trust challenges if run by the store owner."}
    "to-store"
    {:kind :option
     :short "t"
@@ -433,8 +430,7 @@ Browse the latest manual at:
           ;(if to ["-o" to] [])]
         @["hermes-pkgstore" "recv"
           ;store-args
-          ;(if to ["-o" to] [])
-          ;(if (parsed-args "allow-untrusted") ["--allow-untrusted"] [])])))
+          ;(if to ["-o" to] [])])))
 
   (def [pipe1< pipe1>] (posix-spawn/pipe))
   (def [pipe2< pipe2>] (posix-spawn/pipe))
