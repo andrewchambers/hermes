@@ -14,6 +14,8 @@ only proceed if the current user is the root user.
 When `--store` is non empty a single user package store is created which is owned by the 
 current user.
 
+Reinitializing the store as the same user used initially is an idempotent operation.
+
 ## OPTIONS
 
 ```
