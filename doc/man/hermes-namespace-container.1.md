@@ -17,6 +17,9 @@ The purpose of sanboxing builds is to help ensure a package is only
 derived from it's input build function and as little external state 
 as possible.
 
+Any signals received by the sandbox result in termination of all
+processes within the sandbox.
+
 ## OPTIONS
 
 * -n:
