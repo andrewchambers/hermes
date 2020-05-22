@@ -22,9 +22,9 @@ It is safe to abort and retry a package send at any time
 
 * -o, --output VALUE:
   Path to where package output link will be created.
+
 * -s, --store VALUE=:
   Package store to receive the closure.
-
 
 ## SEE ALSO
 
