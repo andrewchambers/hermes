@@ -366,7 +366,7 @@ Browse the latest manual at:
   (os/exit exit-status))
 
 (def- gc-params
-  ["Run the package garbage collector."])
+  ["Remove unreferenced packages by running the package garbage collector."])
 
 (defn- gc
   []

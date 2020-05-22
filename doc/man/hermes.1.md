@@ -3,6 +3,8 @@ hermes(1) - Software Environment Manager
 
 ## SYNOPSIS
 
+Run a hermes sub command.
+
 `hermes init ...`<br>
 `hermes build ...`<br>
 `hermes gc ...`<br>
@@ -38,19 +40,25 @@ which are listed in the next section.
 
 ## PRIMARY SUBCOMMANDS
 
-* hermes-init(1) - Initialize a package store.
-* hermes-build(1) - Install or build a package from a given package path or url.
-* hermes-gc(1) - Remove packages that are no longer in use.
-* hermes-cp(1) - Copy packages between local or remote package stores.
+* hermes-init(1):
+  Initialize a package store.
+* hermes-build(1):
+  Install or build a package from a given package path or url.
+* hermes-gc(1):
+  Remove packages that are no longer in use.
+* hermes-cp(1):
+  Copy packages between local or remote package stores.
 
 ## AUXILLARY SUBCOMMANDS
 
-* hermes-show-build-deps(1) - Show a visualization package of build time dependencies.
-* hermes-version(1) - Print the hermes version.
+* hermes-show-build-deps(1):
+  Show a visualization package of build time dependencies.
+* hermes-version(1):
+  Print the hermes version.
 
 ## ENVIRONMENT
 
-  * `HERMES_STORE`:
+  * HERMES_STORE:
     The path to the package store commands are run against. If unset a root owned, multi user package store
     is assumed.
 

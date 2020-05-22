@@ -1,7 +1,9 @@
 hermes-cp(1) 
-==============
+============
 
 ## SYNOPSIS
+
+Copy packages and their dependencies between package stores.
 
 `hermes cp [options...] FROM [TO]`
 
@@ -9,8 +11,7 @@ hermes-cp(1)
 
 `hermes cp` copies a package pointed to by the package link `FROM` and create a new package link `TO`,
 potentially to different package stores. The path to the receiving package store defaults to HERMES_STORE
-or is taken from the `--to-store` argument if specified. If the TO link is omitted, the package is sent to the
---to-store without creating a package link. If a `TO` link is created, it is saved by the receiving package
+or is taken from the `--to-store` argument if specified. If the TO link is omitted, the package is sent to the `--to-store` without creating a package link. If a `TO` link is created, it is saved by the receiving package
 store as and prevents packages from being garbage collected until deleted.
 
 The copy will take place via ssh(1) if either the FROM or TO argument is prefixed with `ssh://`.
@@ -30,11 +31,8 @@ This use case is generally used for intermediate package transfers.
 
 ## OPTIONS
 
-```
--t, --to-store VALUE 
-  
+* -t, --to-store VALUE:
   The store to copy into.
-```
 
 ## EXAMPLES
 

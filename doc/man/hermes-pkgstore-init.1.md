@@ -1,9 +1,11 @@
 hermes-pkgstore-init(1)
-==================
+=======================
 
 ## SYNOPSIS
 
-`hermes-pkgstore init [OPTIONS]...`<br>
+Initialize a package store.
+
+`hermes-pkgstore init [OPTIONS]...`
 
 ## DESCRIPTION
 
@@ -18,10 +20,8 @@ Reinitializing the store as the same user used initially is an idempotent operat
 
 ## OPTIONS
 
-```
--s, --store
-    The path to the package store to initialize.
-```
+* -s, --store:
+  The path to the package store to initialize.
 
 ## SEE ALSO
 

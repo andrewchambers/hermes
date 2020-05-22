@@ -100,8 +100,7 @@ Example single-user configuration:
 `Roots(LinkPath text primary key)` - A table containing known paths to package roots, each root was once a symlink to a package in the `/hpkg` directory. This table is traversed during package garbage collection
 to delete unreferenced packages.
 
-`Pkgs(Hash text primary key, Name text, TTLExpires integer)` - A table containing information about packages that had successful builds. `Hash` and `Name` can be 
-combined to find the package path on disk. `TTLExpires` is a unix timestamp that marks the point in time the package is eligible for garbage collection.
+`Pkgs(Hash text primary key, Name text)` - A table containing information about packages that had successful builds. `Hash` and `Name` can be combined to find the package path on disk.
 
 `Meta(Key text primary key, Value text)` - A set of arbitrary key/value pairs. Currently only one key is used, 'StoreVersion', and this value is set to 1.
 

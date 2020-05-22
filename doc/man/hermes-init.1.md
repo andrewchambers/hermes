@@ -3,6 +3,8 @@ hermes-init(1)
 
 ## SYNOPSIS
 
+Initialize a package store.
+
 `hermes init `
 
 ## DESCRIPTION
@@ -19,7 +21,7 @@ For details about the contents of the package store after initialization, see he
 
 ## ENVIRONMENT
 
-  * `HERMES_STORE`:
+  * HERMES_STORE:
     The path of the package store to initialize.
 
 ## SEE ALSO

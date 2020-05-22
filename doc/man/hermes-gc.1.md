@@ -3,6 +3,8 @@ hermes-gc(1)
 
 ## SYNOPSIS
 
+Remove unreferenced packages by running the garbage collector.
+
 `hermes gc`
 
 ## DESCRIPTION
