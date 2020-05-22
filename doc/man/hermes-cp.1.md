@@ -23,7 +23,6 @@ Sending packages is done atomically, and therefore is crash safe and also safe t
 
 To ensure package store integrity, the receiving package store must have
 the public key of the sending package store added to it's set of trusted store keys (see hermes-package-store(7)).
-The `--allow-untrusted` option can be passed to `hermes cp` by the owner of the destination store owner to bypass this check.
 
 The store path of the FROM and TO stores may differ, but if they do differ,
 packages may not be runnable in place as absolute PATH references will not be correct.
@@ -32,10 +31,6 @@ This use case is generally used for intermediate package transfers.
 ## OPTIONS
 
 ```
---allow-untrusted 
-  
-  Allow the destination to ignore failed trust challenges if run by the store owner.
-
 -t, --to-store VALUE 
   
   The store to copy into.

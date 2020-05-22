@@ -246,10 +246,7 @@ Browse the latest manual at:
    "output"
    {:kind :option
     :short "o"
-    :help "Path to where package output link will be created."}
-   "allow-untrusted"
-   {:kind :flag
-    :help "Allow the receive end store owner to ignore failed trust challenges"}])
+    :help "Path to where package output link will be created."}])
 
 (defn- recv
   []
@@ -269,7 +266,7 @@ Browse the latest manual at:
   (pkgstore/open-pkg-store store user-info)
 
   (pkgstore/recv-pkg-closure
-    stdout stdin (parsed-args "output") :allow-untrusted (parsed-args "allow-untrusted")))
+    stdout stdin (parsed-args "output")))
 
 (defn sanitize-env
   []

@@ -19,7 +19,6 @@
 (var- *store-user-uid* nil)
 (var- *store-user-gid* nil)
 
-
 (defn open-pkg-store
   [store-path user-info]
 
@@ -106,7 +105,6 @@
       (def secret-key-path (string path "/etc/hermes/signing-key-" store-id ".sec"))
       (def public-key-path (string path "/etc/hermes/signing-key-" store-id ".pub"))
       (sh/$ hermes-signify -G -n
-               -c "Hermes package store key" 
                -s ,secret-key-path
                -p ,public-key-path)
       (os/symlink 
@@ -360,6 +358,7 @@
     (if (= idx (length users))
       (do
         # XXX exp backoff?
+        # XXX We should not print this unless there has been a full cycle.
         (eprintf "waiting for a free build user...")
         (os/sleep 0.5)
         (select-and-lock-build-user users 0))
@@ -373,7 +372,7 @@
     (let [users (get *store-config* :sandbox-build-users [])
           start-idx (mod (++ acquire-build-user-counter) (length users))]
       (select-and-lock-build-user users start-idx))
-    (merge-into (_hermes/getpwuid (_hermes/getuid))
+    (merge-into (_hermes/getpwuid *store-user-uid*)
                 @{:close (fn [self] nil)})))
 
 (defn add-root
@@ -640,119 +639,162 @@
     
     nil)
 
+(defn make-tgz
+  [dir out-path]
+  (def out-path (path/abspath out-path))
+  (def wd (os/cwd))
+  (defer (os/cd wd)
+    (os/cd dir)
+    (unless (zero?
+              (posix-spawn/run
+                ["hermes-minitar"
+                 "-c"
+                 "-z"
+                 "-f" out-path
+                 "."]))
+      (error "tar failed"))))
+
+(defn extract-tgz
+  [tgz-path dest]
+  (def wd (os/cwd))
+  (os/mkdir dest)
+  (defer (os/cd wd)
+    (os/cd dest)
+    (unless (zero?
+              (posix-spawn/run
+                ["hermes-minitar"
+                 "-x"
+                 "-z"
+                 "-f" tgz-path]))
+      (error "unpacking tgz failed"))))
+
+(defn sign-msg
+  [sec-key msg]
+  (sh/$< hermes-signify -q -S -s ,sec-key -m - -e -x - < (string/format "%j" msg)))
+
+(defn unsign-msg
+  [pub-key signed]
+  (def m @"")
+  (unless (sh/$? hermes-signify -q -V -p ,pub-key -m - -e -x - < ,signed > ,m)
+    (error "message corrupt"))
+  (jdn/decode m))
+
 (defn send-pkg-closure
   [out in pkg-root]
 
-  (match (protocol/recv-msg in)
-    [:challenge-trust challenge]
-    (with [tempdir (tempdir/tempdir)]
-      (def pub-key (os/realpath (string *store-path* "/etc/hermes/signing-key.pub")))
-      (def sec-key (os/realpath (string *store-path* "/etc/hermes/signing-key.sec")))
-      (def msg-path (string (tempdir :path) "/challenge"))
-      (def sig-path (string (tempdir :path) "/challenge.sig"))
-      (spit msg-path challenge)
-      (def key-name (path/basename pub-key))
-      (sh/$ hermes-signify -q -S -s ,sec-key -m ,msg-path -x ,sig-path)
-      (protocol/send-msg out [:challenge-response {:key-name key-name :sig (slurp sig-path)}]))
-    (error "protocol error, expected :challenge-trust"))
+  (def pub-key (os/realpath (string *store-path* "/etc/hermes/signing-key.pub")))
+  (def sec-key (os/realpath (string *store-path* "/etc/hermes/signing-key.sec")))
+  (def key-name (path/basename pub-key))
 
   (with [flock (acquire-gc-lock :block :shared)]
-  (with [db (open-db)]
-    
-    (def pkg-path (os/realpath pkg-root))
-    
-    (unless (if-let [[hash name] (path-to-pkg-parts pkg-path)]
-              (has-pkg-with-hash db hash))
-      (error (string/format "unable to send %v, not a package" pkg-path)))
+    (with [db (open-db)]
 
-    (var refs @[])
-    (walkpkgstore/walk-store-closure [pkg-root] (fn [path info _]
-                                     (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
-    (set refs (reverse refs))
+      (def pkg-path (os/realpath pkg-root))
 
-    (protocol/send-msg out [:send-closure refs])
-    (match (protocol/recv-msg in)
-      [:ack-closure want]
+      (unless (if-let [[hash name] (path-to-pkg-parts pkg-path)]
+                (has-pkg-with-hash db hash))
+        (error (string/format "unable to send %v, not a package" pkg-path)))
+
+      (var refs @[])
+      (walkpkgstore/walk-store-closure [pkg-root] (fn [path info _]
+                                                    (array/push refs (pkg-dir-name-from-parts (info :hash) (info :name)))))
+      (set refs (reverse refs))
+
+      (protocol/send-msg out [:send-closure {:key-name key-name
+                                             :signed-refs (sign-msg sec-key refs)}])
+
+      (match (protocol/recv-msg in)
+        [:ack-closure want]
         (let [want-lut (reduce |(put $0 $1 true) @{} want)]
           (set refs (filter want-lut refs)))
-      (error "protocol error, expected [:ack-closure refs]"))
-    
-    (each ref refs
-      (protocol/send-msg out [:sending-pkg ref])
-      (protocol/send-dir out (string *store-path* "/hpkg/" ref)))
+        (error "protocol error, expected :ack-closure"))
 
-    (protocol/send-msg out :end-of-send)
+      (with [tmp (tempdir/tempdir)]
+        (def tgz-path (string (tmp :path) "/pkg.tar.gz"))
+        (each ref refs
+          (def pkg-dir (string *store-path* "/hpkg/" ref))
+          (make-tgz pkg-dir tgz-path)
+          (def tgz-hash (hash/hash "sha256" tgz-path))
+          (def signed-hdr (sign-msg sec-key {:ref ref :hash tgz-hash}))
+          (protocol/send-msg out [:sending-pkg signed-hdr])
+          (with [pkgf (file/open tgz-path :rb)]
+            (protocol/send-file out pkgf))
+          (os/rm tgz-path)))
 
-    (unless (= :ok (protocol/recv-msg in))
-      (error "remote did not acknowledge send")))))
+      (protocol/send-msg out :end-of-send)
+
+      (unless (= :ok (protocol/recv-msg in))
+        (error "remote did not acknowledge send")))))
 
 (defn recv-pkg-closure
-  [out in gc-root &keys {:allow-untrusted allow-untrusted}]
+  [out in gc-root]
 
-  (when allow-untrusted
-    (unless (= (_hermes/getuid) *store-owner-uid*)
-      (error "only the store owner can allow untrusted recieve")))
+  (var incoming-pkgs nil)
+  (var pub-key nil)
 
-  (def challenge (os/cryptorand 8192))
-  (protocol/send-msg out [:challenge-trust challenge])
+  (match (protocol/recv-msg in)
+    [:send-closure {:key-name key-name :signed-refs signed-refs}]
+    (do
+      (when (string/find "/" key-name)
+        (error "key name cannot contain '/'"))
+      (def other-pub-key (string *store-path* "/etc/hermes/trusted-pub-keys/" key-name))
+      (def our-pub-key (string *store-path* "/etc/hermes/" key-name))
+      (set pub-key
+           (cond
+             (os/stat other-pub-key)
+             other-pub-key
+             (os/stat our-pub-key)
+             our-pub-key
+             (error (string "receiving store does not trust remote store key - " key-name))))
 
-  (with [tempdir (tempdir/tempdir)]
-    (match (protocol/recv-msg in)
-      [:challenge-response {:key-name key-name :sig sig}]
-      (unless allow-untrusted
-        (when (string/find "/" key-name)
-          (error "key name cannot contain '/'"))
-        (def other-pub-key (string *store-path* "/etc/hermes/trusted-pub-keys/" key-name))
-        (def our-pub-key (string *store-path* "/etc/hermes/" key-name))
-        (def pub-key
-          (cond
-            (os/stat other-pub-key)
-              other-pub-key
-            (os/stat our-pub-key)
-              our-pub-key
-            (error (string "store does not trust key - " key-name))))
+      (set incoming-pkgs (unsign-msg pub-key signed-refs)))
+    (error "protocol error, expected :send-closure"))
 
-        (def msg-path (string (tempdir :path) "/challenge"))
-        (def sig-path (string (tempdir :path) "/challenge.sig"))
-
-        (spit msg-path challenge)
-        (spit sig-path sig)
-
-        (unless (sh/$? hermes-signify -V -x ,sig-path -m ,msg-path -p ,pub-key
-                  > [stdout :null] > [stderr :null])
-          (error "sender failed trust challenge, check /etc/hermes/trusted-pub-keys/*")))
-      (error "protocol error, expected :challenge-response")))
+  (def root-ref (last incoming-pkgs))
 
   (with [flock (acquire-gc-lock :block :shared)]
-  (with [db (open-db)]
-    (def root-ref
-      (match (protocol/recv-msg in)
-        [:send-closure incoming]
-          (let [want (filter |(not (has-pkg-with-dirname db $)) incoming)]
-            (protocol/send-msg out [:ack-closure want])
-            (last incoming))
-        (error "protocol error, expected :send-closure")))
-    
-    (defn recv-pkgs
-      []
-      (match (protocol/recv-msg in)
-        [:sending-pkg ref]
-          (do
-            (def [pkg-hash pkg-name] (pkg-parts-from-dir-name ref))
-            (with [build-lock (acquire-build-lock pkg-hash :block :exclusive)]
-              (def pkg-path (string *store-path* "/hpkg/" ref))
-              (when (os/stat pkg-path)
-                (_hermes/nuke-path pkg-path))
-              (protocol/recv-dir in pkg-path)
-              (_hermes/storify pkg-path *store-owner-uid* *store-owner-gid*)
-              (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
-                {:hash pkg-hash :name pkg-name}))
-            (recv-pkgs))
-        :end-of-send
-          (protocol/send-msg out :ok)
-        (error "protocol error, expected :end-of-send or :sending-pkg")))
-    
-    (recv-pkgs)
+    (with [db (open-db)]
+      (let [want (filter |(not (has-pkg-with-dirname db $)) incoming-pkgs)]
+        (protocol/send-msg out [:ack-closure want])
+        (set incoming-pkgs want))
 
-    (when gc-root
-      (add-root db (string *store-path* "/hpkg/" root-ref) gc-root)))))
+      (with [tmp (tempdir/tempdir)]
+        (def tgz-path (string (tmp :path) "/pkg.tar.gz"))
+
+        (each incoming-pkg incoming-pkgs
+
+          (match (protocol/recv-msg in)
+            [:sending-pkg signed-hdr]
+            (do
+              (def {:ref ref :hash hash} (unsign-msg pub-key signed-hdr))
+
+              (unless (= ref incoming-pkg)
+                (error "unexpected package arrived"))
+
+              (with [f (file/open tgz-path :wb)]
+                (protocol/recv-file in f))
+
+              (hash/assert tgz-path hash)
+
+              (def [pkg-hash pkg-name] (pkg-parts-from-dir-name ref))
+
+              (with [build-lock (acquire-build-lock pkg-hash :block :exclusive)]
+                # Now that we have the build lock, we must check in case someone
+                # else built it while we were copying other packages.
+                (unless (has-pkg-with-hash db pkg-hash)
+                  (def pkg-path (string *store-path* "/hpkg/" ref))
+                  (when (os/stat pkg-path)
+                    (_hermes/nuke-path pkg-path))
+                  (extract-tgz tgz-path pkg-path)
+                  (_hermes/storify pkg-path *store-owner-uid* *store-owner-gid*)
+                  (sqlite3/eval db "insert into Pkgs(Hash, Name) Values(:hash, :name);"
+                                {:hash pkg-hash :name pkg-name}))))
+            (error "protocol error, expected :sending-pkg"))))
+
+      (match (protocol/recv-msg in)
+        :end-of-send
+        (protocol/send-msg out :ok)
+        (error "protocol error, expected :end-of-send"))
+
+      (when gc-root
+        (add-root db (string *store-path* "/hpkg/" root-ref) gc-root)))))

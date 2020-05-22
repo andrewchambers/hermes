@@ -17,7 +17,7 @@ set -x
 # Set this so we don't get -dirty.
 export HERMES_BUILD_VERISON="$(janet -e '(use ./src/version) (print version)')"
 export HERMES_STATIC_BUILD=yes
-sh ./support/dev-shell.sh -c "jpm load-lockfile lockfile.jdn && jpm build"
+sh ./support/dev-shell.sh -c "jpm build"
 mkdir release
 cp ./build/hermes.tar.gz ./release/hermes-$HERMES_BUILD_VERISON-linux-x64_64.tar.gz
 
