@@ -117,21 +117,21 @@
          (string path "/etc/hermes/signing-key.pub")))
 
     (spit (string path "/var/hermes/lock/gc.lock") "")
+    (def cfg-path (string path "/etc/hermes/cfg.jdn"))
 
     (case mode
       :single-user
         (do
           # Only the user can look in his respository
           (os/chmod path 8r700)
-          # If we mount /hpkg in a user container, then
-          # we must ensure that sandbox user has access.
           (os/chmod (string path "/hpkg") 8r755)
           (def cfg
             (string
               "{\n"
               "  :mode :single-user\n"
               "}\n"))
-          (spit (string path "/etc/hermes/cfg.jdn") cfg))
+          (unless (os/stat cfg-path)
+            (spit cfg-path cfg)))
       :multi-user
         (do
           (os/chmod (string path "/hpkg") 8r755)
@@ -152,8 +152,8 @@
               "    " (string/join (map |(string/format "%j" (string "hermes_build_user" $)) (range 9)) "\n    ") "\n"
               "  ]\n"
               "}\n"))
-
-          (spit (string path "/etc/hermes/cfg.jdn") cfg))
+          (unless (os/stat cfg-path)
+            (spit cfg-path cfg)))
       (error (string/format "unsupported store mode %j" mode)))
 
     (with [db (sqlite3/open (string path "/var/hermes/hermes.db"))]

@@ -3,12 +3,12 @@ hermes(1) - Software Environment Manager
 
 ## SYNOPSIS
 
-`hermes` init<br>
-`hermes` build<br>
-`hermes` gc<br>
-`hermes` cp<br>
-`hermes` show-build-deps<br>
-`hermes` version<br>
+`hermes init ...`<br>
+`hermes build ...`<br>
+`hermes gc ...`<br>
+`hermes cp ...`<br>
+`hermes show-build-deps ...`<br>
+`hermes version ...`<br>
 
 ## DESCRIPTION
 
@@ -33,7 +33,7 @@ The hermes command is split into sub-commands which can be executed to interact 
 store and package definitions.
 Using the `hermes` command and suitable package definitions, you will be able to install, and deploy
 software both locally and remotely. Each subcommand listed in the synopsis  has it's own man page,
-which are linked below.
+which are listed in the next section.
 
 
 ## PRIMARY SUBCOMMANDS
