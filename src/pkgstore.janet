@@ -649,7 +649,7 @@
               (posix-spawn/run
                 ["hermes-minitar"
                  "-c"
-                 "-z"
+                 "-l"
                  "-f" out-path
                  "."]))
       (error "tar failed"))))
@@ -664,7 +664,7 @@
               (posix-spawn/run
                 ["hermes-minitar"
                  "-x"
-                 "-z"
+                 "-l"
                  "-f" tgz-path]))
       (error "unpacking tgz failed"))))
 
