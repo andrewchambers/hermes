@@ -260,7 +260,7 @@ hello world!
 
 Janet is a powerful programming language that lets us create abstractions.
 With a little effort, we can create more powerful ways to define packages, for example, with some
-janet practice you might be able to create a way to define gnu packages like this:
+Janet practice you might be able to create a way to define gnu packages like this:
 
 ```
 (defgnu tar
@@ -290,8 +290,8 @@ as a shorthand for:
 ```
 
 How to define such package abstractions is beyond the scope of the quickstart, but just remember, you don't need to be a janet programmer to write
-packages if someone else has defined suitable functions for you to use. But if you invest in learning some janet programming, you will gain
-not only a great general purpose language, but the ability to define neater packages!
+packages if someone else has defined suitable functions for you to use. But if you invest in learning some janet programming, 
+not only the ability to define neater packages, but also a great general purpose language to use in your day to day programming.
 
 ## Multi user mode
 
