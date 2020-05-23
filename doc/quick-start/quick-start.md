@@ -57,7 +57,7 @@ Now that hermes is installed and initialized, we can start building/installing p
 First let's install the binary seed package (the root dependency of all packages.):
 ```
 $ git clone https://github.com/andrewchambers/hpkgs
-$ hermes build --module ./hpkgs/core.hpkg --expression seed-env --output ./seed-env
+$ hermes build --module ./hpkgs/seed.hpkg --expression seed --output ./seed-env
 
 building /tmp/hermes-store/hpkg/9fe12ef4bec689db93b9e8bdbd3b6d752dc619a8-seed.tar.gz...
 fetching sha256:3d850f281e907d3b78599612ee1a17e63084b98947799a22a3e2a938db98e30a...
@@ -105,7 +105,7 @@ The previous package was quite boring, it just downloaded it from the internet..
 packages from source!
 
 ```
-$ hermes build -m ./hpkgs/core.hpkg -e core-env
+$ hermes build -m ./hpkgs/core.hpkg -e core-env -j $(nproc)
 ...
 ...build output whizzing past...
 ...
@@ -140,15 +140,10 @@ deleting /tmp/hermes-store/hpkg/c992b1918098b76771c3b572c705537482a4a786-dash-0.
 
 ## Using your packages
 
-To use packages, you can add them your PATH. Some packages might require more involved
-setup, in these cases, as a convention, packages that are 'environments' provide an activate script.
-
-You can try this with the core-env you have built by running:
+For many packages, to use them, simply add their bin directory to your PATH. 
 ```
-$ ./core-env/bin/dash
-$ . ./core-env/activate
-$ echo $PATH
-/hpkg/f114d38c842f824b416d8ad8c64ba80cb07a95ef-core-env/bin
+$ export PATH="($pwd)/core-env/bin:$PATH"
+$ dash
 ```
 
 ## Regenerating the seed environment
@@ -160,13 +155,14 @@ $ hermes build -m ./hpkgs/core.hpkg -e seed -o seed
 $ hermes build -m ./hpkgs/core.hpkg -e seed-out -o seed-out
 ```
 
-You can verify your binary seed has the same hash as the binary seed you originally downloaded.
+You can verify your binary seed has the same hash as the binary seed you originally downloaded. Note this generally only works
+for multi user installs of hermes, as the package paths are consistent for all users.
 
 ```
 $ sha256sum ./seed/seed.tar.gz ./seed-out/seed.tar.gz
 ```
 
-When both hashes match, it means you have the ability to regenerate *all* of your hermes software from source. You have *total* control of your software stack :).
+When both hashes match, it means you have the ability to regenerate *all* of your hermes software from source. You have *total* control of your software stack.
 
 ## Writing your own packages
 
@@ -182,8 +178,10 @@ $ cat ./result/.hpkg.jdn
 {:hash "63386eadb35d5aa88567bd851a32112bbc2228c6" :scanned-refs @[] :name "empty-package"}
 ```
 
+This creates a a package object using the hermes builtin `pkg` function.
 
-First, let's create a package with a file in it:
+
+Note, let's create a package with a file in it:
 ```
 $ echo "hello" > hello.txt
 $ hermes build -e '(local-file "./hello.txt")'
@@ -192,7 +190,7 @@ $ cat ./result/hello.txt
 hello
 ```
 
-The example used the builtin ```local-file``` function to create a package object, containing
+The example used the builtin `local-file` hermes function to create a package object, containing
 our desired content.
 
 Now, let's create a package with a file we have downloaded from the internet:
@@ -205,12 +203,10 @@ $ hermes build -e '
 /hpkg/933b4fe2786fb38cd1876de0aa0431e88afabcad-hello.c
 ```
 
-This example used the builtin fetch function to fetch content. Hermes requires external content to specifiy file hashes to ensure
+This example used the builtin `fetch` hermes function to fetch content. Hermes requires external content to specifiy file hashes to ensure
 builds are reproducible.
 
 Now let's create more interesting packages:
-
-The following packages are quite ugly, but later we will see better functions for creating packages more easily.
 
 ```
 $ hermes build -e '
@@ -235,7 +231,7 @@ Finally, let us put everything we tried together:
 
 Create hello.hpkg
 ```
-(import ./hpkgs/core)
+(use ./hpkgs/seed)
 
 (def hello-src
   (fetch
@@ -247,7 +243,7 @@ Create hello.hpkg
     :name "hello"
     :builder
     (fn []
-      (os/setenv "PATH" (string (core/seed-env :path) "/bin"))
+      (os/setenv "PATH" (string (seed :path) "/bin"))
       (def src (first (sh/glob (string (hello-src :path) "/*.c"))))
       (def out (string (dyn :pkg-out) "/hello"))
       (sh/$ x86_64-linux-musl-gcc -static -o ,out src))))
@@ -262,22 +258,40 @@ $ ./result/hello
 hello world!
 ```
 
-Note, the package is ugly! Luckily janet is a powerful programming language that lets us create abstractions.
-
-With a little effort, we can create more powerful ways to define packages, for example, the core definition of the tar package
-simply looks like:
+Janet is a powerful programming language that lets us create abstractions.
+With a little effort, we can create more powerful ways to define packages, for example, with some
+janet practice you might be able to create a way to define gnu packages like this:
 
 ```
-(defcore tar
-  :src-url
-    "https://ftp.gnu.org/gnu/tar/tar-1.32.tar.gz"
+(defgnu tar
+  :version
+    "tar-1.32"
   :src-hash
     "sha256:b59549594d91d84ee00c99cf2541a3330fed3a42c440503326dab767f2fbb96c")
 ```
 
-How to define such package abstractions is beyond the scope of the quickstart, but just remember, you don't need to be a janet programmer to write
-packages if someone else has defined suitable functions for you to use.
+as a shorthand for:
 
+```
+(def tar-src
+  (fetch
+    :url "https://raw.githubusercontent.com/andrewchambers/hermes/master/doc/quick-start/hello.c"
+    :hash "sha256:606789023f0e1da5a251fb56a82b3017900aa1125a6d51bddbe063a189691ae7"))
+
+(def tar
+  (pkg
+    :name "tar-1.32"
+    :builder
+    (fn []
+      (unpack-src tar-src)
+      ...
+      (sh/$ ./configure ...)
+      (sh/$ make install))))
+```
+
+How to define such package abstractions is beyond the scope of the quickstart, but just remember, you don't need to be a janet programmer to write
+packages if someone else has defined suitable functions for you to use. But if you invest in learning some janet programming, you will gain
+not only a great general purpose language, but the ability to define neater packages!
 
 ## Multi user mode
 
