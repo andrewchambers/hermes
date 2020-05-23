@@ -151,8 +151,8 @@ $ dash
 It's pretty sad to have to trust the seed environment, luckily, rebuilding it yourself is simple.
 
 ```
-$ hermes build -m ./hpkgs/core.hpkg -e seed -o seed
-$ hermes build -m ./hpkgs/core.hpkg -e seed-out -o seed-out
+$ hermes build -m ./hpkgs/seed.hpkg -e seed -o seed
+$ hermes build -m ./hpkgs/seed-out.hpkg -e seed-out -o seed-out
 ```
 
 You can verify your binary seed has the same hash as the binary seed you originally downloaded. Note this generally only works
