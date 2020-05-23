@@ -31,3 +31,9 @@ tasks:
       jpm load-lockfile
       jpm --verbose build
       jpm --verbose run build/hermes.tar.gz
+      cd build
+      export PATH="$(pwd):$PATH"
+      cd ..
+      export HERMES_STORE=$(pwd)/test_store
+      hermes init
+      jpm test
