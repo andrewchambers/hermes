@@ -555,8 +555,7 @@
                   (defn make-builder [build-lock-fd chroot hpkg pkg-path pkg-builder parallelism build-uid build-gid allow-fetch]
                     (fn do-build []
                       # N.B. We passed the builder lock fd to our child processes, but
-                      # we close it here so the builder function can't influence our build.
-                      # all are killed, preventing store races in crazy.
+                      # we close it here so the builder function can't influence our build by unlocking it.
                       (_hermes/fd-close build-lock-fd)
                       (_hermes/setuid 0)
                       (_hermes/setgid 0)
@@ -565,7 +564,8 @@
                       (_hermes/mount "/dev" (string chroot "/dev") "" (bor _hermes/MS_BIND _hermes/MS_REC))
                       (_hermes/mount hpkg (string chroot hpkg) "" (bor _hermes/MS_BIND _hermes/MS_RDONLY))
                       (_hermes/mount pkg-path (string chroot pkg-path) "" _hermes/MS_BIND)
-                      (_hermes/mount fetch-socket-path (string chroot "/tmp/fetch.sock") "" _hermes/MS_BIND)
+                      (when allow-fetch
+                        (_hermes/mount fetch-socket-path (string chroot "/tmp/fetch.sock") "" _hermes/MS_BIND))
                       (_hermes/chroot chroot)
                       (_hermes/setegid build-gid)
                       (_hermes/setgid build-gid)
