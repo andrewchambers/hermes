@@ -9,11 +9,11 @@ Build a marshalled package in a package store.
 
 ## DESCRIPTION
 
-`hermes-pkgstore build` is a low level build command usd by the higher level hermes-build(1)
+`hermes-pkgstore build` is a low-level build command usd by the higher level hermes-build(1)
 command.
 
 `--package` is a marshalled package object, containing instructions on how to build a package
-and all of it's dependencies.
+and all of its dependencies.
 
 `--fetch-sock` is a path to a socket to which the build proxies download requests. For remote
 builds this fetch socket is proxied back to the build host allowing access to the client's

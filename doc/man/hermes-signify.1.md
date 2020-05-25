@@ -3,7 +3,7 @@ hermes-signify(1)
 
 ## SYNOPSIS
 
-A copy of the openbsd key cryptographic signing tool https://man.openbsd.org/signify used internally by hermes
+A copy of the OpenBSD key cryptographic signing tool https://man.openbsd.org/signify used internally by hermes
 for package signing.
 
 ```
@@ -21,8 +21,8 @@ for copying packages, and a set of trusted public keys that it will accept
 packages signed with.
 
 The key and signature files created by signify have the same format.
-The first line of the file is a free form text comment that may be edited, so long as it does not exceed a single line.
-Signature comments will be generated based on the name of the secret key used for signing. This comment can then be used as a hint for the name of the public key when verifying. The second line of the file is the actual key or signature base64 encoded.
+The first line of the file is a free-form text comment that may be edited, so long as it does not exceed a single line.
+Signature comments will be generated based on the name of the secret key used for signing. This comment can then be used as a hint for the name of the public key when verifying. The second line of the file is the actual key or signature base64-encoded.
 
 ## OPTIONS
 
@@ -46,6 +46,7 @@ Signature comments will be generated based on the name of the secret key used fo
 
 * -m message:
     When signing, the file containing the message to sign. When verifying, the file containing the message to verify. When verifying with -e, the file to create.
+
 * -n:
     When generating a key pair, do not ask for a passphrase. Otherwise, signify will prompt the user for a passphrase to protect the secret key. When signing with -z, store a zero time stamp in the gzip(1) header.
 
@@ -69,7 +70,7 @@ Signature comments will be generated based on the name of the secret key used fo
 
 ## EXIT STATUS
 
-The signify utility exits 0 on success, and >0 if an error occurs. It may fail because of one of the following reasons:
+The signify utility exits 0 on success, and > 0 if an error occurs. It may fail because of one of the following reasons:
 
 - Some necessary files do not exist.
 - Entered passphrase is incorrect.

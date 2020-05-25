@@ -9,7 +9,7 @@ Receive a package closure sent over stdin/stdout with the send/recv protocol.
 
 ## DESCRIPTION
 
-`hermes-pkgstore recv`receives a package and it's dependencies (also referred to as a package closure)
+`hermes-pkgstore recv`receives a package and its dependencies (also referred to as a package closure)
 from an instance of `hermes-pkgstore recv`. To use this command you must arrange the stdout and stdin
 of the send end to be connected to the stdin and stdout of the recv end.
 
