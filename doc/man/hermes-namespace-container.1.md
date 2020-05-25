@@ -9,8 +9,7 @@ Run a command in a linux namespace jail.
 
 ## DESCRIPTION
 
-Run a command in a namespace jail. Most importantly, we 
-are able to . When used in conjunction with hermes-builder(1) forms
+Run a command in a namespace jail. When used in conjunction with hermes-builder(1) forms
 the basis of the hermes build sandboxing mechanism.
 
 The purpose of sanboxing builds is to help ensure a package is only
