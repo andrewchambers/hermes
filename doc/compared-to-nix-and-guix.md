@@ -2,8 +2,7 @@
 
 ## Philisophical differences
 
-- Hermes has a focus on simplicy and minimalism, while
-  attempting to take some the nicest aspects of Nix and guix.
+- Hermes has a focus on simplicy and minimalism.
   As an example, hermes provides a fraction of the commands or options
   you need to learn compared to either Nix or Guix.
 

@@ -47,7 +47,7 @@ $ ./my-env/bin/ls -la
 
 - A user invokes ```hermes build``` on a hermes package file.
 
-- The file and expression is evaluated in a limited environment and returns a package object graph, which is a graph
+- The file and expression is evaluated and returns a package object graph, which is a graph
   of build functions and package definitions.
 
 - The hermes command marshals this package graph and invokes the equivalent to ```hermes-pkgstore build --store $STOREPATH --pkg $MARSHALLED_PKG```.
