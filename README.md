@@ -7,7 +7,7 @@ works quite differently from traditional tools in this space.
 Hermes helps with tasks similar to other tools like [homebrew](https://brew.sh/)
 or perhaps [docker](https://www.docker.com/), but in a totally different way. For those who know
 [Nix](https://nixos.org/) and [Guix](https://guix.gnu.org/), things will be familiar, but
-there are also some key differences.
+there are also some [key differences](./doc/compared-to-nix-and-guix.md).
 
 ## So what does it do?
 
