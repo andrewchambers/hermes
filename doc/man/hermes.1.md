@@ -20,7 +20,7 @@ specific language, into usable software.
 Some notable features of ```hermes``` include:
 
 * A decentralized packaging model.
-* Easy installation of software over URLS.
+* Easy installation of software over URLs.
 * Easy transfer of software environments between computers.
 * Avoidance of version conflicts with already installed software.
 * Installing software from source code.
@@ -34,7 +34,7 @@ Some notable features of ```hermes``` include:
 The hermes command is split into sub-commands which can be executed to interact with the package
 store and package definitions.
 Using the `hermes` command and suitable package definitions, you will be able to install, and deploy
-software both locally and remotely. Each subcommand listed in the synopsis  has it's own man page,
+software both locally and remotely. Each subcommand listed in the synopsis has its own man page,
 which are listed in the next section.
 
 
@@ -52,14 +52,14 @@ which are listed in the next section.
 ## AUXILLARY SUBCOMMANDS
 
 * hermes-show-build-deps(1):
-  Show a visualization package of build time dependencies.
+  Show a visualization of a package's build-time dependencies.
 * hermes-version(1):
   Print the hermes version.
 
 ## ENVIRONMENT
 
   * HERMES_STORE:
-    The path to the package store commands are run against. If unset a root owned, multi user package store
+    The path to the package store commands are run against. If unset a root-owned, multi user package store
     is assumed.
 
 ## SEE ALSO

@@ -9,11 +9,11 @@ Initialize a package store.
 
 ## DESCRIPTION
 
-The init subcommand creates initializes a package store at the path passed by `--store`.
+The init subcommand creates and initializes a package store at the path passed by `--store`.
 When `--store` is empty, it is assumed to be a multi user global installation, and will
 only proceed if the current user is the root user.
 
-When `--store` is non empty a single user package store is created which is owned by the 
+When `--store` is not empty a single user package store is created which is owned by the 
 current user.
 
 Reinitializing the store as the same user used initially is an idempotent operation.

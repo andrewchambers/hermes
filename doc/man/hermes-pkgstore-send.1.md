@@ -9,7 +9,7 @@ Send a package closure over stdin/stdout with the send/recv protocol.
 
 ## DESCRIPTION
 
-`hermes-pkgstore send` sends a package and it's dependencies (also referred to as a package closure)
+`hermes-pkgstore send` sends a package and its dependencies (also referred to as a package closure)
 to an instance of `hermes-pkgstore recv`. To use this command you must arrange the stdout and stdin
 of the send end to be connected to the stdin and stdout of the recv end.
 

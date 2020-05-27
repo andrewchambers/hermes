@@ -13,7 +13,7 @@ Remove unreferenced packages by running the garbage collector.
 set of active package roots, (symlinks created by commands like hermes-cp(1) and hermes-build(1)) and
 removes packages that are no longer referenced.
 
-If a package build is in progress, hermes-gc(1) will wait before proceeding, during garbage collection
+If a package build is in progress, hermes-gc(1) will wait before proceeding.  Thus, during garbage collection
 no additional package builds will be able to take place.
 
 ## ENVIRONMENT
