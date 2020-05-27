@@ -1,18 +1,18 @@
-# Compared to nix and guix
+# Compared to Nix and Guix
 
 ## Philisophical differences
 
 - Hermes has a focus on simplicy and minimalism, while
   attempting to take some the nicest aspects of Nix and guix.
-  Hermes provides a fraction of the builtin commands or options.
+  Hermes provides a fraction of the builtin commands or options
+  as either Nix or Guix.
 
 - Hermes has a focus on allowing you to run everything yourself
-  without any need for central infrastructure. Any infrastructure
-  we provide is optional, or you can run *easily* on your own.
-
-- Hermes does not place any emphasis on a single blessed package
-  tree. Anyone can make their own, Hermes does not come configured
-  for one.
+  without any need for central infrastructure. 
+  Nix for example, comes preconfigured to fetch software from the hydra build
+  cache centrally run by the project. Hermes does not place any emphasis
+  on a single blessed package tree. Anyone can make their own package tree
+  and hermes does not come configured with one.
 
 ## Practical differences
 
@@ -22,8 +22,8 @@
 
 - Arguably a simpler to learn package model. Nix packages are lazy thunks and
   you must program in a lazy functional language.
-  Guix packages make use a Scheme DSL, multiple 'strata' of code and 
-  a store monad. Hermes packages are just janet functions and when one
+  Guix packages make use a Scheme DSL, 'strata' of code, G-expressions, and 
+  a store monad. Hermes packages are just janet functions and when
   a build gets scheduled, it gets called. All three accomplish more or
   less the same result.
 
