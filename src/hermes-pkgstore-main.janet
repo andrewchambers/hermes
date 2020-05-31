@@ -70,6 +70,15 @@ Browse the latest manual at:
     :default ""
     :help "Package store to initialize."}])
 
+(defn- test-system-group-exists
+  []
+  # Assumes that if the current user is not in the required
+  # group, then the group does not exist.
+  (with [groups-invocation (file/popen "/usr/bin/groups")]
+        (let [groups-str (:read groups-invocation :all)
+              wheel-exists (string/find "wheel" groups-str)]
+          wheel-exists)))
+
 (defn- init
   []
   (drop-setuid+setgid-privs)
@@ -268,6 +277,39 @@ Browse the latest manual at:
   (pkgstore/recv-pkg-closure
     stdout stdin (parsed-args "output")))
 
+(defn- validate
+  []
+  (match (dyn :args)
+    ["init"] (do
+               (def parsed-args (argparse/argparse ;init-params))
+               (unless parsed-args
+                 (os/exit 1))
+
+               (def store (parsed-args "store"))
+               (def mode (if (= store "") :multi-user :single-user))
+               (when (= :multi-user mode)
+                 (unless (test-system-group-exists)
+                   (print `
+validation error: hermes requires the group "wheel" to exist for managing
+multi-user stores. If you can gain root privileges on this machine, you can add
+this group by issuing the command (with root privileges.):
+
+    sudo groupadd wheel
+
+Important! After adding the group, add yourself to the new group:
+
+    sudo useradd -G wheel <your-account-name>
+
+If managing a multi-user store was not intended, you can instead operate on a
+single-user store by specifying --store <store-name> when invoking hermes init,
+or exporting the path via the HERMES_STORE environment variable, as such:
+
+    export HERMES_STORE=/your/desired/path`)
+                   (print)
+                   (os/exit 1)))
+               ))
+  )
+
 (defn sanitize-env
   []
   # Wipe PATH so that setuid installs programs are not influenced.
@@ -283,6 +325,7 @@ Browse the latest manual at:
   (sanitize-env)
   (def args (dyn :args))
   (with-dyns [:args (array/slice args 1)]
+    (validate)
     (match args
       [_ "init"] (init)
       [_ "build"] (build)
