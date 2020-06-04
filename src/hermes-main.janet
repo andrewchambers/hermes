@@ -257,10 +257,11 @@ Browse the latest manual at:
 
   (def debug (parsed-args "debug"))
   (def module (parsed-args :default))
-  (unless module
-    (error "please specify a module to build"))
-
-  (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
+  (def expr (or (get parsed-args "expression")
+                (do
+                  (unless module
+                    (error "please specify a module or expression to build"))
+                  (default-expression-from-module module))))
   (def pkg (load-pkgs expr module))
 
   (unless (= (type pkg) :hermes/pkg)
