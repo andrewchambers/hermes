@@ -6,7 +6,6 @@
 #include <janet.h>
 #include <errno.h>
 #include "hermes.h"
-#include "sha256.h"
 #include "fts.h"
 
 typedef struct {

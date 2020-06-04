@@ -53,12 +53,12 @@ enum {
 static void pushint(HashState *st, int32_t x) {
     if (x >= 0 && x < 128) {
         uint8_t buf[1] = {(uint8_t)x};
-        sha1_update(&st->sha1_ctx, (char*)buf, 1);
+        sha256_update(&st->sha256_ctx, (char*)buf, 1);
     } else if (x <= 8191 && x >= -8192) {
         uint8_t intbuf[2];
         intbuf[0] = ((x >> 8) & 0x3F) | 0x80;
         intbuf[1] = x & 0xFF;
-        sha1_update(&st->sha1_ctx, (char*)intbuf, 2);
+        sha256_update(&st->sha256_ctx, (char*)intbuf, 2);
     } else {
         uint8_t intbuf[5];
         intbuf[0] = LB_INTEGER;
@@ -66,17 +66,17 @@ static void pushint(HashState *st, int32_t x) {
         intbuf[2] = (x >> 16) & 0xFF;
         intbuf[3] = (x >> 8) & 0xFF;
         intbuf[4] = x & 0xFF;
-        sha1_update(&st->sha1_ctx, (char*)intbuf, 5);
+        sha256_update(&st->sha256_ctx, (char*)intbuf, 5);
     }
 }
 
 static void pushbyte(HashState *st, uint8_t b) {
     uint8_t buf[1] = {b};
-    sha1_update(&st->sha1_ctx, (char*)buf, 1);
+    sha256_update(&st->sha256_ctx, (char*)buf, 1);
 }
 
 static void pushbytes(HashState *st, const uint8_t *bytes, int32_t len) {
-    sha1_update(&st->sha1_ctx, (char*)bytes, len);
+    sha256_update(&st->sha256_ctx, (char*)bytes, len);
 }
 
 /* Forward declaration to enable mutual recursion. */
@@ -419,7 +419,7 @@ static void hash_one(HashState *st, Janet x, int flags) {
 }
 
 static void init_pkg_hash_state(HashState *st, JanetTable *rreg) {
-    sha1_init(&st->sha1_ctx);
+    sha256_init(&st->sha256_ctx);
     st->nextid = 0;
     st->seen_defs = NULL;
     st->seen_envs = NULL;
@@ -430,7 +430,7 @@ static void init_pkg_hash_state(HashState *st, JanetTable *rreg) {
 static JanetString finalize_pkg_hash_state(HashState *st) {
     uint8_t buf[HASH_SZ];
     uint8_t hexbuf[HASH_SZ*2];
-    sha1_final(&st->sha1_ctx, &buf[0]);
+    sha256_finish(&st->sha256_ctx, &buf[0]);
     base16_encode((char*)hexbuf, (char*)buf, sizeof(buf));
     janet_table_deinit(&st->seen);
     scratch_v_free(st->seen_envs);

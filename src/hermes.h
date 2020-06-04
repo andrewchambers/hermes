@@ -1,11 +1,11 @@
 
-#define HASH_SZ 20
-#include "sha1.h"
+#define HASH_SZ 64
+#include "sha256.h"
 
 /* types */
 
 typedef struct {
-    Sha1ctx sha1_ctx;
+    Sha256ctx sha256_ctx;
     JanetTable seen;
     JanetTable *rreg;
     JanetFuncEnv **seen_envs;
