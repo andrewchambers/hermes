@@ -1,6 +1,6 @@
 set -eux
 
-hermes build -m ./support/dev-env.hpkg -e dev-env -o dev-env -j $(nproc)
+hermes build -e dev-env -o dev-env -j $(nproc) ./support/dev-env.hpkg
 unset JANET_MODPATH
 export JANET_LIBPATH="$(realpath $(dirname $(realpath ./dev-env/bin/janet))/../lib)"
 export ORIG_PATH=$PATH
