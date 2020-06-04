@@ -25,7 +25,7 @@
 #include "hermes.h"
 
 /* Lead bytes in hashing protocol */
-enum {
+static enum {
     LB_REAL = 200,
     LB_NIL,
     LB_FALSE,
