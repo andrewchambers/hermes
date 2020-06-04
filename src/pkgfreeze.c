@@ -221,8 +221,8 @@ static void hash_one_abstract(HashState *st, Janet x, int flags) {
     if (at == &pkg_type) {
         Pkg *pkg = abstract;
         // We do NOT recurse into other packages. Packages are
-        // identified by their hash. If the hash is nil It 
-        // means there is a circular dependency somewhere. This 
+        // identified by their hash. If the hash is nil It
+        // means there is a circular dependency somewhere. This
         // can sometimes occur due to Janet's closure implementation,
         // or a reference to mutable types that have been altered
         // after package construction.
