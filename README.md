@@ -65,3 +65,8 @@ within the hermes package store.
 Hermes does not care what other package managers you use, and does not install
 packages in the traditional ```/bin``` path so will not conflict with them.
 
+## How can you help?
+
+- Give hermes and hpkgs a star on github.
+- [Donate](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=JX43FQRV6H7XW&source=url) to
+  the project to keep it sustainable and show interest.
