@@ -36,6 +36,7 @@ Hermes also provides some nifty features:
 
 ## What does using Hermes look like?
 
+- See my annoucement [blog post](https://acha.ninja/blog/introducing_hermes/).
 - See the [quickstart guide](./doc/quick-start/quick-start.md).
 - Browse some package definitions [here](https://github.com/andrewchambers/hpkgs).
 
