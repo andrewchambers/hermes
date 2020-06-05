@@ -27,7 +27,6 @@ Hermes also provides some nifty features:
 * Easy transfer of software environments between computers.
 * Avoidance of version conflicts with already installed software.
 * Installing software from source code.
-* Transparent build artifact caching.
 * Strong support for software auditability.
 * Transparent build caching.
 * Remote package builds.
