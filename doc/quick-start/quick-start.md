@@ -57,7 +57,7 @@ Now that hermes is installed and initialized, we can start building/installing p
 First let's install the binary seed package (the root dependency of all packages.):
 ```
 $ git clone https://github.com/andrewchambers/hpkgs
-$ hermes build --expression seed --output ./seed-env ./hpkgs/seed.hpkg
+$ hermes build --output ./seed-env ./hpkgs/seed.hpkg
 
 building /tmp/hermes-store/hpkg/9fe12ef4bec689db93b9e8bdbd3b6d752dc619a8-seed.tar.gz...
 fetching sha256:3d850f281e907d3b78599612ee1a17e63084b98947799a22a3e2a938db98e30a...
