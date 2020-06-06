@@ -55,5 +55,6 @@
   visited)
 
 (defn walk-pkgs
-  [pkgs &opt f]
-  (walk-store-closure (map |(in $ :path) pkgs) f))
+  [pkgs f]
+  (walk-store-closure (map |(in $ :path) pkgs) f)
+  nil)

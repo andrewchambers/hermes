@@ -27,7 +27,6 @@ Hermes also provides some nifty features:
 * Easy transfer of software environments between computers.
 * Avoidance of version conflicts with already installed software.
 * Installing software from source code.
-* Transparent build artifact caching.
 * Strong support for software auditability.
 * Transparent build caching.
 * Remote package builds.
@@ -37,6 +36,7 @@ Hermes also provides some nifty features:
 
 ## What does using Hermes look like?
 
+- See my annoucement [blog post](https://acha.ninja/blog/introducing_hermes/).
 - See the [quickstart guide](./doc/quick-start/quick-start.md).
 - Browse some package definitions [here](https://github.com/andrewchambers/hpkgs).
 
@@ -65,3 +65,8 @@ within the hermes package store.
 Hermes does not care what other package managers you use, and does not install
 packages in the traditional ```/bin``` path so will not conflict with them.
 
+## How can you help?
+
+- Give hermes and hpkgs a star on github.
+- [Donate](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=JX43FQRV6H7XW&source=url) to
+  the project to keep it sustainable and show interest.

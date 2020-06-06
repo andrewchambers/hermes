@@ -19,7 +19,8 @@
   lazy functional language, Guix uses scheme, and Hermes uses
   Janet.
 
-- Arguably a simpler to learn package model. Nix packages are lazy thunks and
+- Arguably, Hermes has a simpler package model.
+  Nix packages are lazy thunks and
   you must program in a lazy functional language.
   Guix packages make use of a Scheme DSL, 'strata' of code, G-expressions, and 
   a store monad. Hermes packages are Janet functions and when

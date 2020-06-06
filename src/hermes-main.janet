@@ -214,10 +214,8 @@ Browse the latest manual at:
 
 (def- build-params
   ["Build a hermes package."
-   "module"
-   {:kind :option
-    :short "m"
-    :help "Path to the module in which to run 'expression'."}
+   :default
+   {:kind :option}
    "build-host"
    {:kind :option
     :help "Build on a remote host and copy the package back."}
@@ -258,8 +256,12 @@ Browse the latest manual at:
     (os/exit 1))
 
   (def debug (parsed-args "debug"))
-  (def module (parsed-args "module"))
-  (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
+  (def module (parsed-args :default))
+  (def expr (or (get parsed-args "expression")
+                (do
+                  (unless module
+                    (error "please specify a module or expression to build"))
+                  (default-expression-from-module module))))
   (def pkg (load-pkgs expr module))
 
   (unless (= (type pkg) :hermes/pkg)
@@ -449,10 +451,8 @@ Browse the latest manual at:
 
 (def- show-build-deps-params
   ["Show the dependency DAG for a package as a set of trees."
-   "module"
-   {:kind :option
-    :short "m"
-    :help "Path to the module in which to run 'expression'."}
+   :default
+   {:kind :option}
    "expression"
    {:kind :option
     :short "e"
@@ -472,7 +472,7 @@ Browse the latest manual at:
   (unless parsed-args
     (os/exit 1))
 
-  (def module (parsed-args "module"))
+  (def module (parsed-args :default))
   (def expr (or (get parsed-args "expression") (default-expression-from-module module)))
   (var pkg (load-pkgs expr module))
 
