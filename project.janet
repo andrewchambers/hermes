@@ -108,12 +108,10 @@
 (declare-native
   :name "_hermes"
   :headers ["src/hermes.h"
-            "src/sha1.h"
             "src/sha256.h"
             "src/fts.h"]
   :source ["src/hermes.c"
            "src/scratchvec.c"
-           "src/sha1.c"
            "src/sha256.c"
            "src/hash.c"
            "src/pkgfreeze.c"
